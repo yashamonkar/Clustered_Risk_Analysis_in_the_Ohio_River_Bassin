@@ -236,8 +236,8 @@ for(i in 1:5){plot(max_annual_pca$x[,i],typ='l', ylab = NA, xlab = paste0("PC ",
 }
 dev.off()
 par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
-pc_loadings  <- max_annual_pca$x[,1:5]
-#write.table(pc_loadings, "Selected PCs.txt", sep = " ")
+prin_comp  <- max_annual_pca$x[,1:5]
+#write.table(prin_comp, "Selected PCs.txt", sep = " ")
 #####################################
 
 ##################Wavelet Analysis###############
@@ -248,12 +248,12 @@ pc_loadings  <- max_annual_pca$x[,1:5]
 #Step 1:- Getting the significant periods (over red noise). 
 pdf(file = 'PC Wavelet Spectrums.pdf')
 predict_ahead <- 5
-pc_training <- head(pc_loadings,-predict_ahead);pc_testing <- tail(pc_loadings,predict_ahead)
+pc_training <- head(prin_comp,-predict_ahead);pc_testing <- tail(prin_comp,predict_ahead)
 yr1 <- 1937; yr2 <- 2017-predict_ahead; yr3 <- yr2+1; yr4 <- 2017
 sig_scales <- as.list(1)
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1.5, 1))
-for(i in 1:ncol(pc_loadings)) {
+for(i in 1:ncol(prin_comp)) {
   p <- pc_training[,i]
   wlt <- wavelet(p)
   C_r <- CI(0.9,p,'r')
@@ -271,7 +271,7 @@ dev.off()
 pdf(file = 'PC Reconstructions.pdf')
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1.5, 1))
-for(i in 1:ncol(pc_loadings)) {
+for(i in 1:ncol(prin_comp)) {
   p <- pc_training[,i]
   wlt <- wavelet(p)
   Cd <- 0.776;psi0 <- pi^(-.025);dj=0.025 #From the Torrence and Compo
@@ -295,7 +295,7 @@ pdf(file = 'PCs - Signals and Noise.pdf')
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1.5, 1))
 signals <- list(NA)
-for(i in 1:ncol(pc_loadings)) {
+for(i in 1:ncol(prin_comp)) {
   
   #Fitting the Wavelet
   p <- pc_training[,i]
@@ -356,10 +356,10 @@ dev.off()
 ######################Fitting ARMA Models###################
 pdf(file='Individual AR Models.pdf')
 signals <- list(NA)
-tot_pc_pred <- matrix(NA,nrow=predict_ahead,ncol=ncol(pc_loadings))
+tot_pc_pred <- matrix(NA,nrow=predict_ahead,ncol=ncol(prin_comp))
 par(mfrow=c(2,2))
 par(mar = c(4, 2, 1.5, 1))
-for(i in 1:ncol(pc_loadings)) {
+for(i in 1:ncol(prin_comp)) {
   
   #Fitting the Wavelet
   p <- pc_training[,i]
@@ -406,7 +406,7 @@ for(i in 1:ncol(pc_loadings)) {
     #par(mfrow=c(1,1))
     
     #Getting the predictions
-    #plot(2001:2017,pc_loadings[65:81,i], type='l', main = paste0("Predictions for PC ", i)
+    #plot(2001:2017,prin_comp[65:81,i], type='l', main = paste0("Predictions for PC ", i)
     #     ,xlab = "Year", ylab = "PC")
     #lines((2017-predict_ahead+1):2017, predict_ts,col='red')
     #legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
@@ -443,7 +443,7 @@ for(i in 1:ncol(pc_loadings)) {
     predict_ts <- rowSums(predict_ts)
     tot_pc_pred[,i] <- predict_ts
     #Getting the predictions
-    #plot(2001:2017,pc_loadings[65:81,i], type='l', main = paste0("Predictions for PC ", i)
+    #plot(2001:2017,prin_comp[65:81,i], type='l', main = paste0("Predictions for PC ", i)
     #    ,xlab = "Year", ylab = "PC")
     #lines((2017-predict_ahead+1):2017, predict_ts,col='red')
     #legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
@@ -457,10 +457,10 @@ dev.off()
 #Plotting the Predictions.
 pdf(file = 'PC Predictions.pdf')
 signals <- list(NA)
-tot_pc_pred <- matrix(NA,nrow=predict_ahead,ncol=ncol(pc_loadings))
+tot_pc_pred <- matrix(NA,nrow=predict_ahead,ncol=ncol(prin_comp))
 par(mfrow=c(3,2))
 par(mar = c(4, 2, 1.5, 1))
-for(i in 1:ncol(pc_loadings)) {
+for(i in 1:ncol(prin_comp)) {
   
   #Fitting the Wavelet
   p <- pc_training[,i]
@@ -507,7 +507,7 @@ for(i in 1:ncol(pc_loadings)) {
     #par(mfrow=c(1,1))
     
     #Getting the predictions
-    plot(2001:2017,pc_loadings[65:81,i], type='l', main = paste0("Predictions for PC ", i)
+    plot(2001:2017,prin_comp[65:81,i], type='l', main = paste0("Predictions for PC ", i)
          ,xlab = "Year", ylab = "PC")
     lines((2017-predict_ahead+1):2017, predict_ts,col='red')
     legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
@@ -544,7 +544,7 @@ for(i in 1:ncol(pc_loadings)) {
     predict_ts <- rowSums(predict_ts)
     tot_pc_pred[,i] <- predict_ts
     #Getting the predictions
-    plot(2001:2017,pc_loadings[65:81,i], type='l', main = paste0("Predictions for PC ", i)
+    plot(2001:2017,prin_comp[65:81,i], type='l', main = paste0("Predictions for PC ", i)
         ,xlab = "Year", ylab = "PC")
     lines((2017-predict_ahead+1):2017, predict_ts,col='red')
     legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
@@ -565,8 +565,8 @@ library("maps")
 loadings <- max_annual_pca$rotation 
 pdf(file = 'Spatial Distribution of PCs.pdf')
 par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
-for(i in 1:dim(pc_loadings)[2]) {
-  ju <- loadings[,i]
+for(i in 1:dim(prin_comp)[2]) {
+  ju <- abs(loadings[,i])
   map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"), boundary = TRUE)
   points(final_sites$dec_long_va,final_sites$dec_lat_va,pch=19,cex=1,col=color.scale(ju,c(1,0.5,0),c(0,0.5,0),c(0,0,1),color.spec="rgb"))
   title(paste0("Spatial Distribution of PC ", i))
