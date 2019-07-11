@@ -1,6 +1,7 @@
 #Files uses PC's to reduce dimensionality
 #The wavelets are used to get information on the non-stationary PCs. 
 #The individual signals are reconstructed using the AR Models. 
+setwd("~/Correlated Risk Analysis/Decadal Influences/PC Wavelet AR Models")
 
 
 
@@ -224,12 +225,18 @@ CI=function(conf, dat,type){
 #We have 81 years and 30 stations
 #This makes the dimensionality of the problem too large to handle. 
 #Therefore we use PCA to reduce the dimensionality
-max_annual_pca <- prcomp(max_annual, scale = TRUE)
+
+#Keeping last 5 years for predictions. 
+predict_ahead <- 5
+training_set <- head(max_annual,-predict_ahead)
+testing_set <- tail(max_annual,predict_ahead)
+
+max_annual_pca <- prcomp(training_set, scale = TRUE)
 var <- cumsum(max_annual_pca$sdev^2)
-pdf(file='Individual AR Models.pdf')
-plot(var/max(var),pch=19, main = "Variance explained by PCs",xlab = "PC's")
+pdf(file='plots/PC Variance Explained.pdf')
+plot(var/max(var),pch=19, main = "Variance explained by PCs",xlab = "PC's",ylab="Fraction Variance explained")
 dev.off()
-pdf(file = 'Selected PCs.pdf')
+pdf(file = 'plots/Selected PCs.pdf')
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1, 1))
 for(i in 1:5){plot(max_annual_pca$x[,i],typ='l', ylab = NA, xlab = paste0("PC ",i))
@@ -237,7 +244,7 @@ for(i in 1:5){plot(max_annual_pca$x[,i],typ='l', ylab = NA, xlab = paste0("PC ",
 dev.off()
 par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
 prin_comp  <- max_annual_pca$x[,1:5]
-#write.table(prin_comp, "Selected PCs.txt", sep = " ")
+write.table(prin_comp, "results/Selected PCs.txt", sep = " ")
 #####################################
 
 ##################Wavelet Analysis###############
@@ -246,15 +253,17 @@ prin_comp  <- max_annual_pca$x[,1:5]
 # We first fit a wavelet to each of the PC's 
 
 #Step 1:- Getting the significant periods (over red noise). 
-pdf(file = 'PC Wavelet Spectrums.pdf')
-predict_ahead <- 5
-pc_training <- head(prin_comp,-predict_ahead);pc_testing <- tail(prin_comp,predict_ahead)
+library("biwavelet")
+library("plotrix")
+library("maps")
+library("stats") 
+pdf(file = 'plots/PC Wavelet Spectrums.pdf')
 yr1 <- 1937; yr2 <- 2017-predict_ahead; yr3 <- yr2+1; yr4 <- 2017
 sig_scales <- as.list(1)
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1.5, 1))
 for(i in 1:ncol(prin_comp)) {
-  p <- pc_training[,i]
+  p <- prin_comp[,i]
   wlt <- wavelet(p)
   C_r <- CI(0.9,p,'r')
   C_w <- CI(0.9,p,'w')
@@ -268,11 +277,11 @@ par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
 dev.off()
 
 #Step 2:- Reconstructing each PC. 
-pdf(file = 'PC Reconstructions.pdf')
+pdf(file = 'plots/PC Reconstructions.pdf')
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1.5, 1))
 for(i in 1:ncol(prin_comp)) {
-  p <- pc_training[,i]
+  p <- prin_comp[,i]
   wlt <- wavelet(p)
   Cd <- 0.776;psi0 <- pi^(-.025);dj=0.025 #From the Torrence and Compo
   reconst <- matrix(NA, ncol = length(p), nrow = length(wlt$scale))
@@ -291,14 +300,14 @@ dev.off()
 
 #Step 3:- Decomposing each PC into signals and noise
 #For this we will have to divide the seperate regions for clustering. 
-pdf(file = 'PCs - Signals and Noise.pdf')
+pdf(file = 'plots/PCs - Signals and Noise.pdf')
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1.5, 1))
 signals <- list(NA)
 for(i in 1:ncol(prin_comp)) {
   
   #Fitting the Wavelet
-  p <- pc_training[,i]
+  p <- prin_comp[,i]
   wlt <- wavelet(p)
   Cd <- 0.776;psi0 <- pi^(-.025);dj=0.025 #From the Torrence and Compo
   reconst <- matrix(NA, ncol = length(p), nrow = length(wlt$scale))
@@ -354,7 +363,7 @@ dev.off()
 
 
 ######################Fitting ARMA Models###################
-pdf(file='Individual AR Models.pdf')
+pdf(file='plots/Individual AR Models.pdf')
 signals <- list(NA)
 tot_pc_pred <- matrix(NA,nrow=predict_ahead,ncol=ncol(prin_comp))
 par(mfrow=c(2,2))
@@ -362,7 +371,7 @@ par(mar = c(4, 2, 1.5, 1))
 for(i in 1:ncol(prin_comp)) {
   
   #Fitting the Wavelet
-  p <- pc_training[,i]
+  p <- prin_comp[,i]
   wlt <- wavelet(p)
   Cd <- 0.776;psi0 <- pi^(-.025);dj=0.025 #From the Torrence and Compo
   reconst <- matrix(NA, ncol = length(p), nrow = length(wlt$scale))
@@ -455,15 +464,13 @@ par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
 dev.off()
 
 #Plotting the Predictions.
-pdf(file = 'PC Predictions.pdf')
+pdf(file = 'plots/PC Predictions.pdf')
 signals <- list(NA)
 tot_pc_pred <- matrix(NA,nrow=predict_ahead,ncol=ncol(prin_comp))
-par(mfrow=c(3,2))
-par(mar = c(4, 2, 1.5, 1))
 for(i in 1:ncol(prin_comp)) {
   
   #Fitting the Wavelet
-  p <- pc_training[,i]
+  p <- prin_comp[,i]
   wlt <- wavelet(p)
   Cd <- 0.776;psi0 <- pi^(-.025);dj=0.025 #From the Torrence and Compo
   reconst <- matrix(NA, ncol = length(p), nrow = length(wlt$scale))
@@ -507,9 +514,9 @@ for(i in 1:ncol(prin_comp)) {
     #par(mfrow=c(1,1))
     
     #Getting the predictions
-    plot(2001:2017,prin_comp[65:81,i], type='l', main = paste0("Predictions for PC ", i)
-         ,xlab = "Year", ylab = "PC")
-    lines((2017-predict_ahead+1):2017, predict_ts,col='red')
+    plot(yr1:yr2,prin_comp[,i], type='l', main = paste0("Predictions for PC ", i)
+         ,xlab = "Year", ylab = "PC", xlim = c(yr1-1,yr4+1))
+    lines(yr3:yr4, predict_ts,col='red')
     legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
     
   } else {#Creating the matrix to store the signals. 
@@ -544,9 +551,9 @@ for(i in 1:ncol(prin_comp)) {
     predict_ts <- rowSums(predict_ts)
     tot_pc_pred[,i] <- predict_ts
     #Getting the predictions
-    plot(2001:2017,prin_comp[65:81,i], type='l', main = paste0("Predictions for PC ", i)
-        ,xlab = "Year", ylab = "PC")
-    lines((2017-predict_ahead+1):2017, predict_ts,col='red')
+    plot(yr1:yr2,prin_comp[,i], type='l', main = paste0("Predictions for PC ", i)
+        ,xlab = "Year", ylab = "PC", xlim = c(yr1-1,yr4+1))
+    lines(yr3:yr4, predict_ts,col='red')
     legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
     
     
@@ -563,7 +570,7 @@ library("biwavelet")
 library("plotrix")
 library("maps")
 loadings <- max_annual_pca$rotation 
-pdf(file = 'Spatial Distribution of PCs.pdf')
+pdf(file = 'plots/Spatial Distribution of PCs.pdf')
 par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
 for(i in 1:dim(prin_comp)[2]) {
   ju <- abs(loadings[,i])
@@ -576,19 +583,19 @@ dev.off()
 
 
 
-
+#Reconstructing the streamflow field
 PC_Predictions <- tot_pc_pred #These are the predictions
 nComp = ncol(PC_Predictions) 
 Predictions_Scaled =  PC_Predictions %*% t(max_annual_pca$rotation[,1:nComp])
-for(i in 1:nComp) {   
+for(i in 1:ncol(Predictions_Scaled)) {   
   Predictions_Scaled[,i] <- scale(Predictions_Scaled[,i], center = FALSE , scale=1/max_annual_pca$scale[i]) }
 
-for(i in 1:nComp) {   
+for(i in 1:ncol(Predictions_Scaled)) {   
   Predictions_Scaled[,i] <- scale(Predictions_Scaled[,i], center = -1 * max_annual_pca$center[i], scale=FALSE)
 }
 
 #Computing Site - Specific MSE
-True_Values <- tail(max_annual,5)
+True_Values <- testing_set
 site_MSE <- bias <- rep(NA,ncol(Predictions_Scaled))
 for(i in 1:ncol(Predictions_Scaled)) {
   site_MSE[i] <- mean((Predictions_Scaled[,i]-True_Values[,i])^2)
@@ -596,13 +603,13 @@ for(i in 1:ncol(Predictions_Scaled)) {
 }
 
 #Plotting the Data
-site_MSE_adj <- as.numeric(site_MSE/(colMeans(max_annual)^2)) + 0.3
+site_MSE_adj <- as.numeric(site_MSE/(colMeans(max_annual)^2))+0.5
 for(i in 1:ncol(Predictions_Scaled)) {
   if(bias[i] == -1) {bias[i] = 19 #Triangle
   } else {bias[i] = 17 } #Over Predictions 
   }
 
-pdf(file = 'Prediction Error.pdf')
+pdf(file = 'plots/Prediction Error.pdf')
 map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
 points(final_sites$dec_long_va,final_sites$dec_lat_va,
        col=color.scale(final_sites$drain_area_va,c(1,0.5,0),c(0,0,1),color.spec="rgb"),
@@ -613,6 +620,108 @@ legend("bottomright", c("Color - Drainage Area","Size - Error in MSE adjusted","
 dev.off()
 
 
+########3###Comparision against base mark prediction Skill Testing################
+#1. Long Term Mean. 
+#2. AR applied to the raw test series. 
 
+
+#########Long Term Mean####################
+All_Predictions <- Predictions_Scaled
+ltm <- matrix(colMeans(training_set), nrow = 1, ncol = ncol(testing_set))
+ltm_skill <- matrix(NA, nrow = predict_ahead, ncol = ncol(testing_set))
+for(i in 1:ncol(ltm_skill)) {
+  for(j in 1:nrow(ltm_skill)) {
+    if(abs(ltm[i]-testing_set[j,i]) > abs(All_Predictions[j,i]-testing_set[j,i])) { ltm_skill[j,i] = 1
+    } else { ltm_skill[j,i] = 0 
+    } 
+  }
+}
+
+par(mfrow=c(1,1))
+pdf("plots/Skill vs Long Term Mean.pdf")
+for(i in 1:nrow(ltm_skill)) {
+  skill <- ltm_skill[i,]
+  for(j in 1:length(skill)) { 
+    if(skill[j]==0) {skill[j] = c("red")
+    } else { skill[j] = c("blue")
+    }
+  }
+  
+  map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
+  points(final_sites$dec_long_va,final_sites$dec_lat_va,
+         pch=19,
+         cex=1,
+         col=skill)
+  title(paste0("Skill Testing vs Mean for Year ", i))
+  legend("bottomright", c("Correct Prediction", "Wrong Prediction"), cex = 0.6, pch = 19, col = c("blue","red"))
+}
+
+skill <- colSums(ltm_skill)
+map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
+points(final_sites$dec_long_va,final_sites$dec_lat_va,
+       pch=19,
+       cex=skill/2,
+       col=color.scale(final_sites$drain_area_va,c(1,0.5,0),c(0,0,1),color.spec="rgb"))
+title("Combined Skill vs Long Term Mean")
+legend("bottomright", c("Color - Drainage Area","Size - Skill"), cex = 0.6)
+dev.off()
+
+
+
+################AR on raw time series####################
+ar_raw <- matrix(NA, nrow = predict_ahead, ncol = ncol(testing_set))
+
+pdf("plots/Raw Time Series AR Models.pdf")
+par(mfrow=c(3,2))
+par(mar = c(4, 2, 1.5, 1))
+for(i in 1:ncol(ar_raw)) {
+  temp_raw <- training_set[,i]
+  fit <- ar(temp_raw, order.max = 10, aic = TRUE)
+  ord <- arimaorder(fit)
+  nota <- paste0("Station ", i)
+  plot(forecast(fit,h=20), xlab =nota)
+  ar_raw[,i] <- forecast(fit,h=5)$mean
+}
+dev.off()
+
+
+ar_skill <- matrix(NA, nrow = predict_ahead, ncol = ncol(testing_set))
+for(i in 1:ncol(ar_skill)) {
+  for(j in 1:nrow(ar_skill)) {
+    if(abs(ar_raw[j,i]-testing_set[j,i]) > abs(All_Predictions[j,i]-testing_set[j,i])) { ar_skill[j,i] = 1
+    } else { ar_skill[j,i] = 0 
+    } 
+  }
+}
+
+par(mfrow=c(1,1))
+pdf("plots/Skill vs Raw TS AR Models.pdf")
+for(i in 1:nrow(ar_raw)) {
+  skill <- ar_skill[i,]
+  for(j in 1:length(skill)) { 
+    if(skill[j]==0) {skill[j] = c("red")
+    } else { skill[j] = c("blue")
+    }
+  }
+  
+  map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
+  points(final_sites$dec_long_va,final_sites$dec_lat_va,
+         pch=19,
+         cex=1,
+         col=skill)
+  title(paste0("Skill Testing vs AR for Year ", i))
+  legend("bottomright", c("Correct Prediction", "Wrong Prediction"), cex = 0.6, pch = 19, col = c("blue","red"))
+}
+
+skill <- colSums(ar_skill)
+map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
+points(final_sites$dec_long_va,final_sites$dec_lat_va,
+       pch=19,
+       cex=skill/2,
+       col=color.scale(final_sites$drain_area_va,c(1,0.5,0),c(0,0,1),color.spec="rgb"))
+title("Combined Skill vs Raw AR")
+legend("bottomright", c("Color - Drainage Area","Size - Skill"), cex = 0.6)
+dev.off()
+############################################################
 
 
