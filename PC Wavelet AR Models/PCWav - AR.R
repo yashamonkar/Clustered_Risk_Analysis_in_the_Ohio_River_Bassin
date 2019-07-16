@@ -96,7 +96,7 @@ dates_year <- format(seq(as.Date("1937-01-01"), as.Date("2017-12-31"), by="days"
 streamflow$year <- dates_year
 max_annual <- streamflow %>% group_by(year) %>% summarise_all(funs(max))
 max_annual$year <- NULL
-max_annual <- as.data.frame(max_annual)
+max_annual <- as.data.frame(log(max_annual))
 ###############################################################3
 
 
@@ -228,6 +228,7 @@ CI=function(conf, dat,type){
 
 #Keeping last 5 years for predictions. 
 predict_ahead <- 5
+yr1 <- 1937;yr2 <- 2017-predict_ahead;yr3 <- yr2+1;yr4 <- 2017 
 training_set <- head(max_annual,-predict_ahead)
 testing_set <- tail(max_annual,predict_ahead)
 
@@ -243,7 +244,36 @@ for(i in 1:5){plot(max_annual_pca$x[,i],typ='l', ylab = NA, xlab = paste0("PC ",
 }
 dev.off()
 par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
-prin_comp  <- max_annual_pca$x[,1:5]
+
+#Plotting the De-trended PC's
+pdf("plots/Detrended PCs.pdf")
+par(mfrow=c(2,2));par(mar = c(4, 3, 3, 1))
+detrended_PC <- matrix(NA, ncol = 5, nrow = nrow(training_set))
+trend_coeff <- matrix(NA, ncol = 2, nrow = 5)
+for(i in 1:5) {
+  p=max_annual_pca$x[,i]
+  fit <- lm(p~c(yr1:yr2))
+  
+  #Saving the data.
+  trend <- c(yr1:yr2)*fit$coefficients[2]+fit$coefficients[1]
+  detrended_PC[,i] <- p-trend
+  trend_coeff[i,] <- fit$coefficients
+  
+  plot(yr1:yr2,p, main = paste0("PC ", i),type='l',xlab = "Year")
+  abline(fit,col='blue')
+  lines(lowess(yr1:yr2,p,f=1/9),lwd=2,col="red")
+  detrended_PC[,i] <- p-trend
+  plot(yr1:yr2,detrended_PC[,i], main = paste0("Detrended PC ", i),type='l',xlab = "Year")
+  lines(lowess(yr1:yr2,detrended_PC[,i],f=1/9),lwd=2,col="red")
+  
+  
+}
+par(mfrow=c(1,1))
+dev.off()
+
+
+
+prin_comp  <- detrended_PC
 write.table(prin_comp, "results/Selected PCs.txt", sep = " ")
 #####################################
 
@@ -258,7 +288,6 @@ library("plotrix")
 library("maps")
 library("stats") 
 pdf(file = 'plots/PC Wavelet Spectrums.pdf')
-yr1 <- 1937; yr2 <- 2017-predict_ahead; yr3 <- yr2+1; yr4 <- 2017
 sig_scales <- as.list(1)
 par(mfrow=c(3,2))
 par(mar = c(4, 1, 1.5, 1))
@@ -507,6 +536,10 @@ for(i in 1:ncol(prin_comp)) {
     predict_ts <- forecast(fit,h=5)$mean
     tot_pc_pred[,i] <- predict_ts
     
+    #Adding the trend (which was subtracted)
+    trend <- trend_coeff[i,1] + trend_coeff[i,2]*c(yr3:yr4)
+    tot_pc_pred[,i] <- tot_pc_pred[,i] + trend
+    
     resd <- fit$resid[!is.na(fit$resid)]
     #Diagnostics
     #par(mfrow = c(2,2))
@@ -514,9 +547,9 @@ for(i in 1:ncol(prin_comp)) {
     #par(mfrow=c(1,1))
     
     #Getting the predictions
-    plot(yr1:yr2,prin_comp[,i], type='l', main = paste0("Predictions for PC ", i)
+    plot(yr1:yr2,max_annual_pca$x[,i], type='l', main = paste0("Predictions for PC ", i)
          ,xlab = "Year", ylab = "PC", xlim = c(yr1-1,yr4+1))
-    lines(yr3:yr4, predict_ts,col='red')
+    lines(yr3:yr4, tot_pc_pred[,i],col='red')
     legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
     
   } else {#Creating the matrix to store the signals. 
@@ -550,10 +583,15 @@ for(i in 1:ncol(prin_comp)) {
     }
     predict_ts <- rowSums(predict_ts)
     tot_pc_pred[,i] <- predict_ts
+    
+    #Adding the trend (which was subtracted)
+    trend <- trend_coeff[i,1] + trend_coeff[i,2]*c(yr3:yr4)
+    tot_pc_pred[,i] <- tot_pc_pred[,i] + trend
+    
     #Getting the predictions
-    plot(yr1:yr2,prin_comp[,i], type='l', main = paste0("Predictions for PC ", i)
+    plot(yr1:yr2, max_annual_pca$x[,i], type='l', main = paste0("Predictions for PC ", i)
         ,xlab = "Year", ylab = "PC", xlim = c(yr1-1,yr4+1))
-    lines(yr3:yr4, predict_ts,col='red')
+    lines(yr3:yr4, tot_pc_pred[,i],col='red')
     legend('bottomright', legend = c("Real","predicted"), lty = 1, col =c('black','red'), cex = 0.6)
     
     
