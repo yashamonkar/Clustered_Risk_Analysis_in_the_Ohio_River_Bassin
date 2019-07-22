@@ -1,0 +1,442 @@
+---
+title: "Experiment:- Influence of Number of PCs"
+author: "Yash Amonkar"
+date: "July 17, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The whole point of this experiment is that the selection of PC's is not just on the variance explained but also on the error in prediction associated with each PC. Consequently selecting a lower number of PC's might actually be helpful. 
+
+###The Data input should be field data and site locations.  
+
+#Load the Libraries
+```{r, message=FALSE, warning=FALSE}
+library(dataRetrieval)
+library(dplyr)
+library(dams)
+library(NbClust)
+library(factoextra)
+library(maps)
+library(corrplot)
+library(extRemes)
+library(xts)
+library(cluster)
+library(foreign)
+library(nnet)
+library(forecast)
+```
+
+#Reading the High-Dimensional Data
+```{r}
+input_data <- read.table("data/Max_Annual_Streamflow.txt", sep=" ",header=TRUE)
+site_info <- read.table("data/site_information.txt",sep=" ",header=TRUE)
+```
+
+#Wavelet Functions with Confidence Intervals
+```{r}
+wavelet=function(Y,dj=0.025){
+  
+  #Y is time series to be analyzed
+  DT=1# is timestep for annual data, 1
+  pad=1
+  #dj=0.025
+  param=6
+  #pad data ? 0=F, 1=T
+  #dj= spacing between discrete scales (.025)
+  #param = wavenumber (6)
+  
+  s0=2*DT
+  
+  n1 = length(Y)
+  J1=floor((log2(n1*DT/s0))/dj)
+  
+  
+  #....construct time series to analyze, pad if necessary
+  x = Y - mean(Y)
+  
+  
+  if (pad == 1){
+    base2 = trunc(log(n1)/log(2) + 0.4999)   # power of 2 nearest to N
+    x = c(x, rep(0, 2^(base2 + 1) - n1))
+  }
+  n = length(x)
+  
+  #....construct wavenumber array used in transform [Eqn(5)]
+  k = (1:trunc(n/2))
+  k = k*((2*pi)/(n*DT))
+  k = c(0, k, -rev(k[1:floor((n-1)/2)]))
+  
+  #....compute FFT of the (padded) time series
+  f = fft(x)    # [Eqn(3)]
+  
+  #....construct SCALE array & empty PERIOD & WAVE arrays
+  scale = s0*2^((0:J1)*dj)
+  period = scale;
+  wave = matrix(data=0, ncol=n, nrow=J1+1)  # define the wavelet array
+  wave = as.complex(wave)  # make it complex
+  wave=matrix(data=wave, ncol=n, nrow=J1+1)
+  
+  # loop through all scales and compute transform
+  for(a1 in 1:(J1+1)){
+    scl=scale[a1]		
+    
+    nn = length(k);
+    k0 = param
+    expnt = -(scl*k - k0)^2/(2*(k > 0))
+    norm = sqrt(scl*k[2])*(pi^(-0.25))*sqrt(nn)    # total energy=N   [Eqn(7)]
+    daughter = norm*exp(expnt)
+    daughter = daughter*(k > 0)    # Heaviside step function
+    fourier_factor = (4*pi)/(k0 + sqrt(2 + k0^2)) # Scale-->Fourier [Sec.3h]
+    coi = fourier_factor/sqrt(2)                  # Cone-of-influence [Sec.3g]
+    dofmin = 2                                   # Degrees of freedom
+    
+    out <- list(daughter=daughter, fourier_factor=fourier_factor,coi=coi,dofmin=dofmin)
+    
+    daughter=out$daughter
+    fourier_factor=out$fourier_factor
+    coi=out$coi
+    dofmin=out$dofmin	
+    wave[a1,] = fft((f*daughter), inverse = TRUE)/(length(f*daughter))  # wavelet transform[Eqn(4)]
+  }
+  
+  period = fourier_factor*scale
+  
+  coi = coi*c(1:(floor(n1 + 1)/2), rev(1:floor(n1/2))) * DT
+  
+  wave = wave[,1:n1]  # get rid of padding before returning
+  power=abs(wave)^2
+  ncol=length(power[1,])
+  nrow=length(scale)
+  avg.power=apply(power,1,mean)
+  result=list(wave=wave, period=period, scale=scale, power=power, coi=coi,nc=ncol,nr=nrow,p.avg=avg.power)
+  return(result)
+}
+CI=function(conf, dat,type){
+  
+  #### enter confidence as decimal 0-1
+  #### two types of tests available 1) red noise enter: "r" , white noise enter: "w"
+  # requires the wavelet function
+  
+  na=length(dat)
+  wlt=wavelet(dat)
+  
+  if(type=="r"){
+    
+    zz=arima(dat/10^10, order = c(1, 0, 0))
+    alpha=zz$coef[1]
+    print(alpha)
+  } else{
+    alpha=0
+  }
+  
+  ps=wlt$period
+  LP= length(ps)
+  
+  freq = 1/ps
+  
+  CI=1:LP    ## confidence interval
+  
+  for(i in 1:LP){
+    
+    P=(1-(alpha^2))/(1+(alpha^2)-(2*alpha*cos(2*pi*freq[i])))    # descrete fourier power spectrum page 69 [qn 16] ( torrence and compo)... null hypothesis test
+    df=2*sqrt(1+((na/(2.32*ps[i]))^2))
+    CI[i] =P*(qchisq(conf, df)/df)*var(dat)          #divide by 2 removes power of 2.....for mean no chi dist.[ eqn 17]
+  }
+  
+  
+  list(sig=CI)
+  
+}
+#These include functions to compute the wavelets and the confidence intervals on the wavelets. 
+#############END Wavelet Function###################
+```
+
+
+
+
+#Experiment
+```{r}
+############################PCA######################
+#We have 81 years and 30 stations
+#This makes the dimensionality of the problem too large to handle. 
+#Therefore we use PCA to reduce the dimensionality
+
+#Keeping last 5 years for predictions. 
+predict_ahead <- 5
+yr1 <- 1;yr2 <- dim(input_data)[1]-predict_ahead;yr3 <- yr2+1;yr4 <- dim(input_data)[1] 
+training_set <- head(input_data,-predict_ahead)
+testing_set <- tail(input_data,predict_ahead)
+
+
+#NUmber of PC's in the Loop 
+Tot_PC <- 10
+
+#DataSets to Store Information across the PC's
+LTM_SKILL <- matrix(NA, nrow = Tot_PC, ncol = 1)
+AR_SKILL <- matrix(NA, nrow = Tot_PC, ncol = 1)
+
+
+
+#Master Loop
+for(tot_pc in 1:Tot_PC) {
+  
+input_data_pca <- prcomp(training_set, scale = TRUE)
+var <- cumsum(input_data_pca$sdev^2)
+npcs <- tot_pc #NUmber of Selected PCs
+
+
+detrended_PC <- matrix(NA, ncol = npcs, nrow = nrow(training_set))
+trend_coeff <- matrix(NA, ncol = 2, nrow = npcs)
+for(i in 1:npcs) {
+  p=input_data_pca$x[,i]
+  fit <- lm(p~c(yr1:yr2))
+  
+  #Saving the data.
+  trend <- c(yr1:yr2)*fit$coefficients[2]+fit$coefficients[1]
+  detrended_PC[,i] <- p-trend
+  trend_coeff[i,] <- fit$coefficients
+  detrended_PC[,i] <- p-trend
+  }
+par(mfrow=c(1,1))
+ 
+prin_comp  <- detrended_PC
+#####################################
+
+##################Wavelet Analysis###############
+# We have reduced the dimensionality of the data using PCA. 
+#Now we try to uncover further spatial aspects using Wavelet Analysis.
+# We first fit a wavelet to each of the PC's 
+
+#Step 1:- Getting the significant periods (over red noise). 
+library("biwavelet")
+library("plotrix")
+library("maps")
+library("stats") 
+ #pdf(file = 'plots/PC Wavelet Spectrums. #pdf')
+sig_scales <- as.list(1)
+par(mfrow=c(3,2))
+par(mar = c(4, 1, 1.5, 1))
+for(i in 1:ncol(prin_comp)) {
+  p <- prin_comp[,i]
+  wlt <- wavelet(p)
+  C_r <- CI(0.9,p,'r')
+  C_w <- CI(0.9,p,'w')
+  sig_scales[[i]] <- which(wlt$p.avg > C_r$sig)
+}
+par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
+ 
+
+########Fitting ARMA Models#############
+signals <- list(NA)
+tot_pc_pred <- matrix(NA,nrow=predict_ahead,ncol=ncol(prin_comp))
+for(i in 1:ncol(prin_comp)) {
+  
+  #Fitting the Wavelet
+  p <- prin_comp[,i]
+  wlt <- wavelet(p)
+  Cd <- 0.776;psi0 <- pi^(-.025);dj=0.025 #From the Torrence and Compo
+  reconst <- matrix(NA, ncol = length(p), nrow = length(wlt$scale))
+  for(j in 1:ncol(reconst)) {reconst[,j] <- Re(wlt$wave[,j])/(wlt$scale[i]^0.5)}
+  
+  
+  #Getting the significant portions
+  temp <- sig_scales[[i]]
+  temp_list <- list(NA)
+  n_signals <- length(which(diff(temp)>1))+1 #Number of seperate signals
+  if (n_signals > 1) { st <- 1
+  for(j in 1:n_signals) {
+    en <- c(which(diff(temp)>1),length(temp))
+    en <- en[j]
+    temp_list[[j]] <- temp[st:en] 
+    st <- en+1
+  } 
+  }
+  if(n_signals < 2) { temp_list <- list(temp)}
+  n_clust <- length(rapply(temp_list, length))
+  
+  #Case with no significant regions.
+  if(rapply(temp_list, length) == 0) {
+    
+    #Creating the matrix to store the time series.
+    p_reconst <- colSums(reconst)*dj/(Cd*psi0) 
+    breakdown_ts <- matrix(data = p_reconst, ncol = 1, nrow = length(p))
+    predict_ts <- matrix(data=NA, ncol = 1, nrow = predict_ahead)
+    
+    #Fitting an ARIMA Model. 
+    fit <- ar(breakdown_ts[,1], aic = TRUE, order.max = 10)
+    ord <- arimaorder(fit)
+    #plot(forecast(fit,h=20), xlab = paste0("Reconstructed PC ", i))
+    predict_ts <- forecast(fit,h=5)$mean
+    tot_pc_pred[,i] <- predict_ts
+    
+    #Adding the trend (which was subtracted)
+    trend <- trend_coeff[i,1] + trend_coeff[i,2]*c(yr3:yr4)
+    tot_pc_pred[,i] <- tot_pc_pred[,i] + trend
+    
+    resd <- fit$resid[!is.na(fit$resid)]
+    #Diagnostics
+    #par(mfrow = c(2,2))
+    #plot(density(resd), main ="Resd");acf(resd, main = "ACF");pacf(resd, main = "PACF")
+    #par(mfrow=c(1,1))
+    
+    
+  } else {#Creating the matrix to store the signals. 
+    breakdown_ts <- matrix(NA, ncol = length(rapply(temp_list, length))+1, nrow = length(p))
+    predict_ts <- matrix(NA, ncol = length(rapply(temp_list, length))+1, nrow = predict_ahead)
+    for(jk in 1:length(rapply(temp_list, length))) {
+      clust_members <- temp_list[[jk]]
+      t <- reconst[clust_members,]
+      t_reconst <- colSums(t)*dj/(Cd*psi0)
+      breakdown_ts[,jk] <- t_reconst}
+    #Modelling the noise terms.
+    noise <- unlist(temp_list)
+    t_noise <- reconst[-noise,]
+    t_reconst <- colSums(t_noise)*dj/(Cd*psi0)
+    breakdown_ts[,ncol(breakdown_ts)] <- t_reconst
+    
+    #Fitting ARIMA Models to each component. 
+    for(jks in 1:ncol(breakdown_ts)) {
+      fit <- ar(breakdown_ts[,jks], order.max = 10, aic = TRUE)
+      ord <- arimaorder(fit)
+      nota <- paste0("Reconstructed PC ", i, "'s signal ", jks)
+      if(jks == ncol(breakdown_ts)){nota <- paste0("Reconstructed PC ", i, "'s noise ")}
+      #plot(forecast(fit,h=20), xlab =nota)
+      predict_ts[,jks] <- forecast(fit,h=5)$mean
+      #resd <- fit$resid[!is.na(fit$resid)]
+      #Diagnostics
+      #par(mfrow = c(2,2))
+      #plot(density(resd), main ="Resd");acf(resd, main = "ACF");pacf(resd, main = "PACF")
+      #par(mfrow=c(1,1))
+      
+    }
+    predict_ts <- rowSums(predict_ts)
+    tot_pc_pred[,i] <- predict_ts
+    
+    #Adding the trend (which was subtracted)
+    trend <- trend_coeff[i,1] + trend_coeff[i,2]*c(yr3:yr4)
+    tot_pc_pred[,i] <- tot_pc_pred[,i] + trend
+    
+      }
+}
+par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
+ 
+
+
+###########Spatial Distribution of MSE##############
+
+#PC Loadings
+library("biwavelet")
+library("plotrix")
+library("maps")
+loadings <- input_data_pca$rotation 
+
+#Reconstructing the streamflow field
+PC_Predictions <- tot_pc_pred #These are the predictions
+nComp = ncol(PC_Predictions) 
+Predictions_Scaled =  PC_Predictions %*% t(input_data_pca$rotation[,1:nComp])
+for(i in 1:ncol(Predictions_Scaled)) {   
+  Predictions_Scaled[,i] <- scale(Predictions_Scaled[,i], center = FALSE , scale=1/input_data_pca$scale[i]) }
+
+for(i in 1:ncol(Predictions_Scaled)) {   
+  Predictions_Scaled[,i] <- scale(Predictions_Scaled[,i], center = -1 * input_data_pca$center[i], scale=FALSE)
+}
+
+#Computing Site - Specific MSE
+True_Values <- testing_set
+site_MSE <- bias <- rep(NA,ncol(Predictions_Scaled))
+for(i in 1:ncol(Predictions_Scaled)) {
+  site_MSE[i] <- mean((Predictions_Scaled[,i]-True_Values[,i])^2)
+  bias[i] <- sign(sum(Predictions_Scaled[,i]-True_Values[,i]))
+}
+
+########3###Comparision against base mark prediction Skill Testing################
+#1. Long Term Mean. 
+#2. AR applied to the raw test series. 
+
+
+#########Long Term Mean####################
+All_Predictions <- Predictions_Scaled
+ltm <- matrix(colMeans(training_set), nrow = 1, ncol = ncol(testing_set))
+ltm_skill <- matrix(NA, nrow = predict_ahead, ncol = ncol(testing_set))
+for(i in 1:ncol(ltm_skill)) {
+  for(j in 1:nrow(ltm_skill)) {
+    if(abs(ltm[i]-testing_set[j,i]) > abs(All_Predictions[j,i]-testing_set[j,i])) { ltm_skill[j,i] = 1
+    } else { ltm_skill[j,i] = 0 
+    } 
+  }
+}
+
+par(mfrow=c(1,1))
+
+for(i in 1:nrow(ltm_skill)) {
+  skill <- ltm_skill[i,]
+  for(j in 1:length(skill)) { 
+    if(skill[j]==0) {skill[j] = c("red")
+    } else { skill[j] = c("blue")
+    }
+  } }
+  
+ 
+
+################AR on raw time series####################
+ar_raw <- matrix(NA, nrow = predict_ahead, ncol = ncol(testing_set))
+for(i in 1:ncol(ar_raw)) {
+  temp_raw <- training_set[,i]
+  fit <- ar(temp_raw, order.max = 10, aic = TRUE)
+  ord <- arimaorder(fit)
+  nota <- paste0("Station ", i)
+  ar_raw[,i] <- forecast(fit,h=5)$mean
+}
+ 
+ar_skill <- matrix(NA, nrow = predict_ahead, ncol = ncol(testing_set))
+for(i in 1:ncol(ar_skill)) {
+  for(j in 1:nrow(ar_skill)) {
+    if(abs(ar_raw[j,i]-testing_set[j,i]) > abs(All_Predictions[j,i]-testing_set[j,i])) { ar_skill[j,i] = 1
+    } else { ar_skill[j,i] = 0 
+    } 
+  }
+}
+
+for(i in 1:nrow(ar_raw)) {
+  skill <- ar_skill[i,]
+  for(j in 1:length(skill)) { 
+    if(skill[j]==0) {skill[j] = c("red")
+    } else { skill[j] = c("blue")
+    }
+  }
+}
+  AR_SKILL[tot_pc,1] <- sum(ar_skill)
+  LTM_SKILL[tot_pc,1] <- sum(ltm_skill)
+
+}
+############################################################
+
+
+```
+
+
+#Plotting the effect of PCs
+```{r}
+
+#Against Auto-Regressive Models
+plot(1:Tot_PC,AR_SKILL/(ncol(input_data)*predict_ahead),type='l',
+     xlab = "Number of PCs selected", 
+     ylab = "Fraction of predictions",
+     main = "Comparision against the AR Models base case",
+     ylim = c(0,1)
+     )
+
+#Against Long Term Mean
+plot(1:Tot_PC,LTM_SKILL/(ncol(input_data)*predict_ahead),type='l',
+     xlab = "Number of PCs selected", 
+     ylab = "Fraction of predictions",
+     main = "Comparision against the Long Term Mean",
+     ylim = c(0,1)
+     )
+
+```
+
