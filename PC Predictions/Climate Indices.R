@@ -21,13 +21,16 @@ site_info <- read.table("data/site_information.txt", sep="", header = TRUE)
 ####Principal Component Analysis####
 data_pca <- prcomp(input_data, scale = TRUE)
 var <- cumsum(data_pca$sdev^2)
+pdf(file = "plots/Climate_Indices/Variance by PCs.pdf")
 plot(var/max(var),pch=19, main = "Variance explained by PCs",xlab = "PC's",ylab="Fraction Variance explained")
 npcs <- 3 #This is the selected number of PC'S
 abline(h = var[npcs]/max(var), lty = 2, col='red')
+dev.off()
 pcs_sel <- data_pca$x[,1:npcs]
 
 
 ####PC Visualization####
+pdf(file = "plots/Climate_Indices/PC Visualizaion.pdf")
 for(i in 1:npcs) {
   x <- pcs_sel[,i]
   #Plotting the Data
@@ -41,7 +44,7 @@ for(i in 1:npcs) {
   pacf(x, main = paste0("PC -",i )) 
   par(mfrow=c(1,1), mar=c(4,2,2,2))
 }
-
+dev.off()
 
 #######Climate Indices############
 #Reading in the climate indices. 
@@ -111,18 +114,20 @@ climate_indices$ENSO_NAO <- scale(climate_indices$ENSO_NAO)
 climate_indices$PDO_NAO <- scale(climate_indices$PDO_NAO)
 
 #########Plotting the Correlations########
+pdf(file = "plots/Climate_Indices/PC Correlation Matrix.pdf")
 for(i in 1:npcs) {
   temp <-  cbind(pcs_sel[,i],climate_indices)
   colnames(temp)[1] <- paste0("PC_",i)
   M<-cor(temp)
   corrplot(M, type="upper")
 }
-
+dev.off()
 
 ########Regression Predictions#########
+pdf(file = "plots/Climate_Indices/PC Predictions.pdf")
 for(i in 1:npcs) {
   x <- pcs_sel[,i]
-  n_ahead <- 10
+  n_ahead <- 9
   clim_data <- climate_indices[1:(nrow(climate_indices)-n_ahead),]
   train <- head(x,-n_ahead)
   test <- tail(x,n_ahead)
@@ -143,11 +148,13 @@ for(i in 1:npcs) {
   
   print(paste0("The model AIC is for PC_",i, " is ", AIC(mod.lm)))
 }
+dev.off()
 
 #Predicting just based on NAO and ENSO_PDO. 
+pdf(file = "plots/Climate_Indices/PC Prediction NAO ENSO_PDO.pdf")
 for(i in 1:npcs) {
   x <- pcs_sel[,i]
-  n_ahead <- 10
+  n_ahead <- 9
   clim_data <- climate_indices[1:(nrow(climate_indices)-n_ahead),]
   train <- head(x,-n_ahead)
   test <- tail(x,n_ahead)
@@ -156,7 +163,7 @@ for(i in 1:npcs) {
   mod.lm <- lm(train~., training_data)
   print(summary(mod.lm))
   par(mfrow=c(2,2), mar = c(1,1,3,1))
-  plot(mod.lm)
+  #plot(mod.lm)
   
   clim_data <- climate_indices[(nrow(climate_indices)-n_ahead+1):nrow(climate_indices),]
   act_clim_data <- data.frame(NAO = clim_data$NAO, ENSO_PDO = clim_data$ENSO_PDO)
@@ -168,12 +175,13 @@ for(i in 1:npcs) {
   lines(yr3:yrn, pred$fit, lwd = 2, col ='red')
   print(paste0("The model AIC is for PC_",i, " is ", AIC(mod.lm)))
 }
-
+dev.off()
 
 #Predicting just based on just NAO. 
+pdf(file = "plots/Climate_Indices/PC Predictions NAO.pdf")
 for(i in 1:npcs) {
   x <- pcs_sel[,i]
-  n_ahead <- 10
+  n_ahead <- 9
   clim_data <- climate_indices[1:(nrow(climate_indices)-n_ahead),]
   train <- head(x,-n_ahead)
   test <- tail(x,n_ahead)
@@ -194,6 +202,7 @@ for(i in 1:npcs) {
   lines(yr3:yrn, pred$fit, lwd = 2, col ='red')
   print(paste0("The model AIC is for PC_",i, " is ", AIC(mod.lm)))
 }
+dev.off()
 
 ######Making Predictions on the real space based on the PCs#########
 
@@ -210,7 +219,7 @@ act_clim_data <- data.frame(NAO = clim_data$NAO, ENSO_PDO = clim_data$ENSO_PDO)
 pred <- predict(mod.lm,act_clim_data,n_ahead)
 yr1 <- 1937;yrn <- yr1+length(x)-1;yr2 <- yrn-n_ahead;yr3 <- yr2+1
 plot(yr1:yrn, x, type='l',
-     main = paste0("PC ",i))
+     main = paste0("PC ",1))
 lines(yr3:yrn, pred$fit, lwd = 2, col ='red')
 
 
@@ -221,10 +230,12 @@ library("maps")
 loadings <- data_pca$rotation 
 par(mfrow=c(1,1));par(mar = c(4, 3, 3, 1))
 ju <- abs(loadings[,1])
+pdf(file = "plots/Climate_Indices/Spatial Distribution of PCs.pdf")
 map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"), boundary = TRUE)
 points(site_info$dec_long_va,site_info$dec_lat_va,pch=19,cex=1,col=color.scale(ju,c(1,0.5,0),c(0,0.5,0),c(0,0,1),color.spec="rgb"))
 title(paste0("Spatial Distribution of PC 1"))
 legend("bottomright", legend = c("high","low"), col = c("blue","red"), cex =0.6, pch =19)
+dev.off()
 
 #Reconstructing the streamflow field
 PC_Predictions <- pred$fit #These are the predictions
@@ -253,7 +264,7 @@ for(i in 1:ncol(Predictions_Scaled)) {
   } else {bias[i] = 17 } #Over Predictions 
 }
 
-
+pdf(file = "plots/Climate_Indices/Bias in prediction.pdf")
 map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
 points(site_info$dec_long_va,site_info$dec_lat_va,
        col=color.scale(site_info$drain_area_va,c(1,0.5,0),c(0,0,1),color.spec="rgb"),
@@ -261,7 +272,7 @@ points(site_info$dec_long_va,site_info$dec_lat_va,
        pch=bias)
 title("Error in Streamflow Prediction")
 legend("bottomright", c("Color - Drainage Area","Size - Error in MSE adjusted","Shape - Bias"), cex = 0.6)
-
+dev.off()
 
 ########3###Comparision against base mark prediction Skill Testing################
 #1. Long Term Mean. 
@@ -271,6 +282,7 @@ legend("bottomright", c("Color - Drainage Area","Size - Error in MSE adjusted","
 
 
 #########Long Term Mean####################
+pdf(file = "plots/Climate_Indices/Accuracy against LTM.pdf")
 All_Predictions <- Predictions_Scaled
 training_set <- exp(head(input_data,-n_ahead))
 testing_set <- True_Values
@@ -306,15 +318,22 @@ skill <- colSums(ltm_skill)
 map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
 points(site_info$dec_long_va,site_info$dec_lat_va,
        pch=19,
-       cex=skill/2,
+       cex=skill/4,
        col=color.scale(site_info$drain_area_va,c(1,0.5,0),c(0,0,1),color.spec="rgb"))
 title("Combined Skill vs Long Term Mean")
 legend("bottomright", c("Color - Drainage Area","Size - Skill"), cex = 0.6)
+par(mar = c(4,4,4,1))
+plot(1:n_ahead, rowMeans(ltm_skill),type='l',
+     xlab = "Year Ahead",
+     ylab = "Accurate Predictions", 
+     main = "Prediction Accuracy against LTM")
+legend("bottomleft", legend = c(paste0("Mean Acc is ", round(sum(ltm_skill)/(n_ahead*ncol(input_data)),2))),
+       cex = 0.75)
 
-
-
+dev.off()
 
 #########Regression to individual Stations#######
+pdf(file = "plots/Climate_Indices/Accuracy against Raw Regression.pdf")
 reg_raw <- matrix(NA, nrow = n_ahead, ncol = ncol(testing_set))
 for(i in 1:ncol(reg_raw)) {
   temp <- exp(input_data[,i])
@@ -353,7 +372,7 @@ for(i in 1:nrow(reg_raw)) {
          pch=19,
          cex=1,
          col=skill)
-  title(paste0("Skill Testing vs AR for Year ", i))
+  title(paste0("Skill Testing vs Raw Regression for Year ", i))
   legend("bottomright", c("Correct Prediction", "Wrong Prediction"), cex = 0.6, pch = 19, col = c("blue","red"))
 }
 
@@ -361,11 +380,18 @@ skill <- colSums(reg_skill)
 map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
 points(site_info$dec_long_va,site_info$dec_lat_va,
        pch=19,
-       cex=skill/2,
+       cex=skill/3,
        col=color.scale(site_info$drain_area_va,c(1,0.5,0),c(0,0,1),color.spec="rgb"))
-title("Combined Skill vs Raw AR")
+title("Combined Skill vs Raw Regression")
 legend("bottomright", c("Color - Drainage Area","Size - Skill"), cex = 0.6)
-
+par(mar = c(4,4,4,1))
+plot(1:n_ahead, rowMeans(reg_skill),type='l',
+     xlab = "Year Ahead",
+     ylab = "Accurate Predictions", 
+     main = "Prediction Accuracy against Raw Regressions")
+legend("bottomleft", legend = c(paste0("Mean Acc is ", round(sum(reg_skill)/(n_ahead*ncol(input_data)),2))),
+       cex = 0.75)
+dev.off()
 ############################################################
 
 
