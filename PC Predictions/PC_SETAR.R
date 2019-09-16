@@ -136,7 +136,8 @@ par(mar = c(4, 2, 1.5, 1))
 
 boxplot(mean_sim, 
         ylim = c(1,-1))
-title(paste0("Mu-PC", i,"emd=",k))
+#title(paste0("Mu-PC", i,"emd=",k))
+title(paste0("Mu - PC ", i))
 abline(h=mean(x), col = 'red')
 
 boxplot(sd_sim, 
@@ -145,12 +146,12 @@ title(paste0("SD - PC ", i))
 abline(h=sd(x), col = 'red')
 
 boxplot(max_sim, 
-        ylim = c(0,20))
+        ylim = c(0,10))
 title(paste0("Max - PC ", i))
 abline(h=max(x), col = 'red')
 
 boxplot(min_sim, 
-        ylim = c(-20,2))
+        ylim = c(-10,2))
 title(paste0("Min - PC ", i))
 abline(h=min(x), col = 'red')
 par(mfrow=c(1,1))
@@ -722,18 +723,16 @@ for(j in 1:N_Sims) {
 }
  
 #pdf(file = "plots/SETAR/Global Wavelet Simulations.pdf")
+par(mar=c(4,4,3,1))
 for(i in 1:npcs) {
   x <- scale(pcs_sel[,i])
   Cw=CI(0.9,x,"w");
   C=CI(0.9,x,"r");
   wlt_og=wavelet(x)
   plot(wlt_og$period,wlt_og$p.avg,xlim=c(0,75),
-       main=paste0("Global Wavelet Spectrum for PC",i),
+       main=paste0("Global Wavelet Spectrum(Simulated) for PC",i),
        xlab="Period",ylab="Variance", col ='red',
-       ylim = c((min(wlt_og$p.avg)-1),(max(wlt_og$p.avg)+7.5))) 
-  lines(wlt_og$period,wlt_og$p.avg, col ='red');
-  lines(wlt$period,Cw$sig, lty = 2);
-  lines(wlt$period,C$sig,col="red", lty = 2);
+       ylim = c((min(wlt_og$p.avg)-1),8)) 
   avg_pow_matrix <- matrix(NA, nrow = N_Sims, ncol = length(wlt$p.avg))
   if (i ==  1) {
     avg_pow_matrix <- avg_pow_1
@@ -746,9 +745,189 @@ for(i in 1:npcs) {
   lower_percentile <- apply(avg_pow_matrix, 2, function(x) quantile(x, probs=.05))
   upper_percentile <- apply(avg_pow_matrix, 2, function(x) quantile(x, probs=.95))
   median_percentile <- apply(avg_pow_matrix, 2, median)
+  low <- cbind(lower_percentile,wlt_og$period)
+  high <- cbind(upper_percentile,wlt_og$period)
+  sims <- as.data.frame(rbind(low,high))
+  colnames(sims) <- c("Variance","Period")
+  
+  
+  polygon(c(wlt_og$period,rev(wlt_og$period)),c(lower_percentile,rev(upper_percentile)),col="gray")
   lines(wlt_og$period, lower_percentile)
   lines(wlt_og$period, upper_percentile)
+  lines(wlt_og$period,wlt_og$p.avg, col ='red', lwd = 2)
+  points(wlt_og$period,wlt_og$p.avg, col ='red')
   lines(wlt_og$period, median_percentile, lwd = 2)
+  }
+#dev.off()
+
+
+###########Cumulative Distribution Functions#########
+
+#pdf(file = "plots/SETAR/CDF Simulations.pdf")
+  N_Sims <- 1000 
+  x_eval <- seq(-3,3,0.01)
+  avg_cdf_1 <- matrix(NA, nrow = N_Sims, ncol = length(x_eval))
+  avg_cdf_2 <- matrix(NA, nrow = N_Sims, ncol = length(x_eval))
+  avg_cdf_3 <- matrix(NA, nrow = N_Sims, ncol = length(x_eval))
+  
+  for(j in 1:N_Sims) {
+    #Setting up matrix to store the PC powers  
+    p_t <- rep(NA,length(x_eval))
+    
+    #Simulating the three PCs
+    sims.setar_1st <- setar.sim(B = B_1st,
+                                lag = embd_1st,
+                                nthresh = 1, 
+                                Thresh = tail(mod.setar_1st$coefficients,1), 
+                                type = "simul", 
+                                thDelay = thDelay_1st,
+                                n = 81)
+    cdf_1st <- ecdf(sims.setar_1st$serie)
+    for(k in 1:length(x_eval)) p_t[k] <- cdf_1st(x_eval[k])
+    avg_cdf_1[j,] <- p_t
+    
+    sims.setar_2nd <- setar.sim(B = B_2nd,
+                                lag = embd_2nd,
+                                nthresh = 1, 
+                                Thresh = tail(mod.setar_2nd$coefficients,1), 
+                                type = "simul", 
+                                thDelay = thDelay_2nd,
+                                n = 81)
+    cdf_2nd <- ecdf(sims.setar_2nd$serie)
+    for(k in 1:length(x_eval)) p_t[k] <- cdf_2nd(x_eval[k])
+    avg_cdf_2[j,] <- p_t
+    
+    sims.setar_3rd <- setar.sim(B = B_3rd,
+                                lag = embd_3rd,
+                                nthresh = 1, 
+                                Thresh = tail(mod.setar_3rd$coefficients,1), 
+                                type = "simul", 
+                                thDelay = thDelay_3rd,
+                                n = 81)
+    cdf_3rd <- ecdf(sims.setar_3rd$serie)
+    for(k in 1:length(x_eval)) p_t[k] <- cdf_3rd(x_eval[k])
+    avg_cdf_3[j,] <- p_t
+    
+  }
+  
+for(i in 1:ncol(pcs_sel)) {
+  x <- scale(pcs_sel[,i])
+  cdf_og <- ecdf(x)
+  for(k in 1:length(x_eval)) p_t[k] <- cdf_og(x_eval[k])
+  
+  #Getting the simulated CDF's
+  if (i ==  1) {
+    avg_cdf <- avg_cdf_1
+  } else if ( i == 2) {
+    avg_cdf <- avg_cdf_2
+  } else  {
+    avg_cdf <- avg_cdf_3
+  }
+  
+  #Getting the percentiles
+  lower_percentile <- apply(avg_cdf, 2, function(x) quantile(x, probs=.05))
+  upper_percentile <- apply(avg_cdf, 2, function(x) quantile(x, probs=.95))
+  median_percentile <- apply(avg_cdf, 2, median)
+  
+  #Plotting the CDF
+  plot(x_eval, p_t, type='l',col='red',
+       lwd = 2, main = paste0("Simulated CDF PC-",i), 
+       xlab = "x", ylab = "CDF")
+  polygon(c(x_eval,rev(x_eval)),c(lower_percentile,rev(upper_percentile)),col="gray")
+  lines(x_eval, median_percentile, lwd = 2)
+  lines(x_eval, p_t, col='red', lwd = 2)
+  legend('bottomright', legend = c("Median Simulations", "True CDF","90% Confidence Region"),
+         lty = 1, col = c('black','red','grey'), lwd = 2, cex = 0.75)
+
+}
+#dev.off()
+################################################3
+  
+  
+
+  
+  
+#########Site Specific CDF Distributions###########
+N_Sims <- 1000 
+avg_sims_1 <- matrix(NA, ncol = N_Sims, nrow = nrow(pcs_sel))
+avg_sims_2 <- matrix(NA, ncol = N_Sims, nrow = nrow(pcs_sel))
+avg_sims_3 <- matrix(NA, ncol = N_Sims, nrow = nrow(pcs_sel))
+
+
+#pdf(file = "plots/SETAR/Site Specific CDF Simulations.pdf")
+for(j in 1:N_Sims) {
+
+  #Simulating the three PCs
+  sims.setar_1st <- setar.sim(B = B_1st,
+                              lag = embd_1st,
+                              nthresh = 1, 
+                              Thresh = tail(mod.setar_1st$coefficients,1), 
+                              type = "simul", 
+                              thDelay = thDelay_1st,
+                              n = 81)
+  avg_sims_1[,j] <- sims.setar_1st$serie
+  
+  
+  sims.setar_2nd <- setar.sim(B = B_2nd,
+                              lag = embd_2nd,
+                              nthresh = 1, 
+                              Thresh = tail(mod.setar_2nd$coefficients,1), 
+                              type = "simul", 
+                              thDelay = thDelay_2nd,
+                              n = 81)
+  avg_sims_2[,j] <- sims.setar_2nd$serie
+  
+  sims.setar_3rd <- setar.sim(B = B_3rd,
+                              lag = embd_3rd,
+                              nthresh = 1, 
+                              Thresh = tail(mod.setar_3rd$coefficients,1), 
+                              type = "simul", 
+                              thDelay = thDelay_3rd,
+                              n = 81)
+  avg_sims_3[,j] <- sims.setar_3rd$serie
+  
+}
+
+#Converting the simulations to actual sites 
+for(k in 1:ncol(input_data)){
+  
+  #Computing the CDF of the Site
+  x_eval <- cdf_og <- seq(6,13,0.01)
+  og <- ecdf(input_data[,k])
+  for(jk in 1:length(x_eval)) cdf_og[jk] <- og(x_eval[jk])
+
+  #Storing the Simulated CDF's
+  sim_cdf <- matrix(NA, ncol = N_Sims, nrow = length(x_eval))
+  
+  for(j in 1:N_Sims){
+    si <- cbind(avg_sims_1[,j]*sd(pcs_sel[,1]), avg_sims_2[,j]*sd(pcs_sel[,2]), avg_sims_3[,j]*sd(pcs_sel[,3])) 
+    PC_Simulations <- si #These are the predictions
+    nComp = ncol(PC_Simulations)
+    Simulations_Scaled =  PC_Simulations %*% t(data_pca$rotation[,1:nComp])
+    for(i in 1:ncol(Simulations_Scaled)) {   Simulations_Scaled[,i] <- scale(Simulations_Scaled[,i], center = FALSE , scale=1/data_pca$scale[i]) }
+    for(i in 1:ncol(Simulations_Scaled)) {   Simulations_Scaled[,i] <- scale(Simulations_Scaled[,i], center = -1 * data_pca$center[i], scale=FALSE)}
+    
+    #Computing each CDF
+    cdf_sim <- ecdf(Simulations_Scaled[,k])
+    for(i in 1:length(x_eval)) sim_cdf[i,j] <- cdf_sim(x_eval[i])
+  }
+  
+  #Getting the percentiles
+  lower_percentile <- apply(sim_cdf, 1, function(x) quantile(x, probs=.05))
+  upper_percentile <- apply(sim_cdf, 1, function(x) quantile(x, probs=.95))
+  median_percentile <- apply(sim_cdf, 1, median)
+  
+  #Plotting the CDF
+  plot(x_eval, cdf_og, type='l',col='red',
+       lwd = 2, main = paste0("Simulated CDF Site-",k), 
+       xlab = "x", ylab = "CDF",
+       xlim = c(min(input_data[,k])-0.5,max(input_data[,k])+0.5))
+  polygon(c(x_eval,rev(x_eval)),c(lower_percentile,rev(upper_percentile)),col="gray")
+  lines(x_eval, median_percentile, lwd = 2)
+  lines(x_eval, cdf_og, col='red', lwd = 2)
+  legend('bottomright', legend = c("Median Simulations", "True CDF","90% Confidence Region"),
+         lty = 1, col = c('black','red','grey'), lwd = 2, cex = 0.75)
+  
 }
 #dev.off()
 

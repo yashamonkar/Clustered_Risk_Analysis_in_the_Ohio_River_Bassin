@@ -1,7 +1,7 @@
 #######File Objective##########
-1. Fitting a SETAR Model to individual PCs.
-2. If there is a trend in the data detrending it using loess. loess
-3. Trying to simulate the data and checking if the relevant metrics are recovered. 
+#1. Fitting a SETAR Model to individual PCs.
+#2. If there is a trend in the data detrending it using loess. loess
+#3. Trying to simulate the data and checking if the relevant metrics are recovered. 
 
 
 ###Getting to the directory####
@@ -140,18 +140,21 @@ for(i in 1:npcs) {
   #plot(mod.lm)
   
   act_clim_data <- climate_indices[(nrow(climate_indices)-n_ahead+1):nrow(climate_indices),]
-  pred <- predict(mod.lm,act_clim_data,n_ahead)
+  pred <- predict.lm(mod.lm,act_clim_data,n_ahead,interval = "prediction")
   
   par(mfrow=c(1,1), mar = c(3,3,3,2))
   yrs_start <- 50
   yrs <- (1936+yrs_start):2017
   test_yrs <- tail(yrs, n_ahead)
   plot(yrs, x[yrs_start:length(x)], type='l',
-       main = paste0("Regression with Climate Indices for PC ",i))
+       main = paste0("Regression with Climate Indices for PC ",i),
+       ylim = c(min(pred$fit), max(pred$fit)))
   lines(test_yrs, tail(x,n_ahead), col = 'blue', lwd = 2.5)
-  lines(test_yrs, pred$fit, col ='red', lwd = 2.5)
-  legend("bottomleft", legend = c("Testing Data", "Training Data", "Predictions"),
-         lwd = c(2.5,1,2.5), col = c("blue","black","red"), lty = 1)
+  lines(test_yrs, pred$fit[,1], col ='red', lwd = 2.5)
+  lines(test_yrs, pred$fit[,2], col = 'red', lty = 2)
+  lines(test_yrs, pred$fit[,3], col = 'red', lty = 2)
+  legend("bottomleft", legend = c("Testing Data", "Training Data", "Predictions", "Prediction  Intervals"),
+         lwd = c(2.5,1,2.5), col = c("blue","black","red","red"), lty = c(1,1,1,2))
   
   print(paste0("The model AIC is for PC_",i, " is ", AIC(mod.lm)))
 }
@@ -174,18 +177,21 @@ for(i in 1:npcs) {
   
   clim_data <- climate_indices[(nrow(climate_indices)-n_ahead+1):nrow(climate_indices),]
   act_clim_data <- data.frame(NAO = clim_data$NAO, ENSO_PDO = clim_data$ENSO_PDO)
-  pred <- predict(mod.lm,act_clim_data,n_ahead)
+  pred <- predict.lm(mod.lm,act_clim_data,n_ahead,interval = "prediction")
   
   par(mfrow=c(1,1), mar = c(3,3,3,2))
   yrs_start <- 50
   yrs <- (1936+yrs_start):2017
   test_yrs <- tail(yrs, n_ahead)
   plot(yrs, x[yrs_start:length(x)], type='l',
-       main = paste0("Regression with Climate Indices for PC ",i))
+       main = paste0("Regression with NAO and ENSO-PDO for PC ",i),
+       ylim = c(min(pred$fit), max(pred$fit)))
   lines(test_yrs, tail(x,n_ahead), col = 'blue', lwd = 2.5)
-  lines(test_yrs, pred$fit, col ='red', lwd = 2.5)
-  legend("bottomleft", legend = c("Testing Data", "Training Data", "Predictions"),
-         lwd = c(2.5,1,2.5), col = c("blue","black","red"), lty = 1)
+  lines(test_yrs, pred$fit[,1], col ='red', lwd = 2.5)
+  lines(test_yrs, pred$fit[,2], col = 'red', lty = 2)
+  lines(test_yrs, pred$fit[,3], col = 'red', lty = 2)
+  legend("bottomleft", legend = c("Testing Data", "Training Data", "Predictions", "Prediction  Intervals"),
+         lwd = c(2.5,1,2.5), col = c("blue","black","red","red"), lty = c(1,1,1,2))
   
   }
 #dev.off()
@@ -203,22 +209,25 @@ for(i in 1:npcs) {
   mod.lm <- lm(train~., training_data)
   print(summary(mod.lm))
   par(mfrow=c(2,2), mar = c(1,1,3,1))
-  plot(mod.lm)
+  #plot(mod.lm)
   
   clim_data <- climate_indices[(nrow(climate_indices)-n_ahead+1):nrow(climate_indices),]
   act_clim_data <- data.frame(NAO = clim_data$NAO)
-  pred <- predict(mod.lm,act_clim_data,n_ahead)
+  pred <- predict.lm(mod.lm,act_clim_data,n_ahead,interval = "prediction")
   
   par(mfrow=c(1,1), mar = c(3,3,3,2))
   yrs_start <- 50
   yrs <- (1936+yrs_start):2017
   test_yrs <- tail(yrs, n_ahead)
   plot(yrs, x[yrs_start:length(x)], type='l',
-       main = paste0("Regression with Climate Indices for PC ",i))
+       main = paste0("Regression with just NAO for PC ",i),
+       ylim = c(min(pred$fit), max(pred$fit)))
   lines(test_yrs, tail(x,n_ahead), col = 'blue', lwd = 2.5)
-  lines(test_yrs, pred$fit, col ='red', lwd = 2.5)
-  legend("bottomleft", legend = c("Testing Data", "Training Data", "Predictions"),
-         lwd = c(2.5,1,2.5), col = c("blue","black","red"), lty = 1)
+  lines(test_yrs, pred$fit[,1], col ='red', lwd = 2.5)
+  lines(test_yrs, pred$fit[,2], col = 'red', lty = 2)
+  lines(test_yrs, pred$fit[,3], col = 'red', lty = 2)
+  legend("bottomleft", legend = c("Testing Data", "Training Data", "Predictions", "Prediction Intervals"),
+         lwd = c(2.5,1,2.5), col = c("blue","black","red","red"), lty = c(1,1,1,2))
 }
 #dev.off()
 

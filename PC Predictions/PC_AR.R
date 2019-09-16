@@ -60,12 +60,17 @@ par(mfrow = c(1,1))
 ######################AR Model################
 #pdf(file = "plots/AR/Simulated PC.pdf")
 for(i in 1:ncol(pcs_sel)){
-x <- pcs_sel[,i]
-x <- scale(x)
-og_density <- density(x)
+x_s <- pcs_sel[,i]
+x_s <- scale(x_s)
+x <- x_s-min(x_s)*1.01
+og_density <- density(x_s)
 
 #Auto-Regressive Modelling
-mod_ar <- ar(x, aic = TRUE)
+mod.ar <- ar(x, aic = TRUE)
+x_p <- x
+lambda <- BoxCox.lambda(x_p, method = "loglik")
+x_t <- (-1+x_p^lambda)/lambda
+mod_ar <- ar(x_t, aic = TRUE)
 
 #AR Simulations
 N_Sims <- 1000
@@ -79,6 +84,8 @@ for(j in 1:N_Sims) {
   sims <- arima.sim(n = length(x),
                     list(order = arimaorder(mod_ar),
                          ar = mod_ar$ar))
+  sims <- min(x_s)*1.01+(lambda*sims+1)^(1/lambda)
+  sims <- na.omit(as.numeric(sims))
   mean_sim[j,1] <- mean(sims)
   sd_sim[j,1] <- sd(sims)
   max_sim[j,1] <- max(sims)
