@@ -10,8 +10,8 @@ setwd("~/Correlated Risk Analysis/Decadal Influences/PC Predictions")
 
 
 ###Loading Libraries##########
-library(forecast)
-library(e1071)
+library(ggplot2)
+
 
 ###Reading the Data and Initial Manipulation###
 input_data <- read.table("data/Max_Annual_Streamflow.txt", sep="", header = TRUE)
@@ -22,138 +22,144 @@ site_info <- read.table("data/site_information.txt", sep="", header = TRUE)
 ####Principal Component Analysis#############
 data_pca <- prcomp(input_data, scale = TRUE)
 var <- cumsum(data_pca$sdev^2)
-#pdf(file = "plots/AR/Variance explained.pdf")
+#pdf(file = "plots/SETAR/Variance explained.pdf")
 plot(var/max(var),pch=19, main = "Variance explained by PCs",xlab = "PC's",ylab="Fraction Variance explained")
 npcs <- 3 #This is the selected number of PC'S
 abline(h = var[npcs]/max(var), lty = 2, col='red')
-##dev.off()
+#dev.off()
 pcs_sel <- data_pca$x[,1:npcs]
 #################################################2
 
-
-###############Diagnostics##########
-#pdf(file = "plots/AR/PC Diagnostics.pdf")
-for(i in 1:ncol(pcs_sel)) {
-
-x <- pcs_sel[,i]
-
-#Plotting the Data
-  plot(pcs_sel[,i], main = paste0("PC - ", i), type = 'l', 
-       xlab = "Years", ylab = " ")
-
-
-
-#Histograms
-par(mfrow=c(1,1), mar=c(4,2,4,1))
-  hist(pcs_sel[,i], main = paste0("PC - ", i), 
-       xlab = " ")
-
-
-#PACF and ACF's
-par(mfrow=c(2,1), mar=c(2,4,4,1))
-acf(x, main = paste0("PC -",i ))
-pacf(x, main = paste0("PC -",i )) 
-par(mfrow = c(1,1))
-
+######################KNN Simulations################
+#k=number of neighbors,ns= number of simulations
+#otherwise a v similar structure
+knnsim=function(y,x,xtest,k,ns,w=NULL){
+  x=as.matrix(x)
+  xtest=as.matrix(xtest)
+  y=as.matrix(y)
+  if(is.null(w))w=rep(1,ncol(x))
+  if(nrow(y)!= nrow(x))
+    print('error: lengths of y and x differ')
+  if(ncol(x)!= ncol(xtest))
+    print('error: col lengths of x and xtest differ')
+  
+  na=rep(NA,nrow(xtest))
+  yknn=matrix(NA,nrow=ns,ncol(y))
+  
+  yk=na
+  
+  yr=seq(1,nrow(y))
+  
+  for(i in 1:nrow(xtest)){
+    a=matrix(NA,nrow(x),ncol(x))
+    for(n in 1:ncol(x))
+      a[,n]=100*w[n]*(x[,n]- xtest[i,n])^2
+    
+    #Finding the cumulative distance matrix
+    c=rowSums(a,na.rm=T)
+    
+    yk[rank(c,ties.method='first')]=yr
+    
+    j=rank(c)		#equal prob for equidistant neighbours
+    sj=sum(j[1:k]^(-1))
+    pj=(j[1:k]^(-1))/sj #Probability of sampling
+    
+    ynp=sample(yk[1:k],ns,replace=T,prob=pj) #yk[1:k] are the closet neighbours. 
+    for(p in 1:ncol(y)) 
+      yknn[,p]=y[ynp,p]
+    
+  }
+  return(yknn)
 }
-##dev.off()
-######################AR Model################
-#pdf(file = "plots/AR/Simulated PC.pdf")
-for(i in 1:ncol(pcs_sel)){
-x_s <- pcs_sel[,i]
-x_s <- scale(x_s)
-x <- x_s-min(x_s)*1.01
-og_density <- density(x_s)
 
-#Auto-Regressive Modelling
-mod.ar <- ar(x, aic = TRUE)
-x_p <- x
-lambda <- BoxCox.lambda(x_p, method = "loglik")
-x_t <- (-1+x_p^lambda)/lambda
-mod_ar <- ar(x_t, aic = TRUE)
+##################Simulating the PCs Data################ 
+for(i in 1:ncol(pcs_sel)) {
+  y <- scale(pcs_sel[,i])
+  x <- 1:length(y)
 
-#AR Simulations
-N_Sims <- 1000
-mean_sim <- matrix(NA, ncol = 1, nrow = N_Sims)
-sd_sim <- matrix(NA, ncol = 1, nrow = N_Sims)
-min_sim <- max_sim <- matrix(NA, ncol = 1, nrow = N_Sims)
+og_density <- density(y)
 consolid_sims <- as.list(1)
 consolid_points <- as.list(1)
-
-for(j in 1:N_Sims) {
-  sims <- arima.sim(n = length(x),
-                    list(order = arimaorder(mod_ar),
-                         ar = mod_ar$ar))
-  sims <- min(x_s)*1.01+(lambda*sims+1)^(1/lambda)
-  sims <- na.omit(as.numeric(sims))
-  mean_sim[j,1] <- mean(sims)
-  sd_sim[j,1] <- sd(sims)
-  max_sim[j,1] <- max(sims)
-  min_sim[j,1] <- min(sims)
+sims_all <- as.list(1)
+x_tests <- seq(1,length(x),by = 0.5)
+for(j in 1:length(x_tests)) {
+  xtest <- x_tests[j]
+  sims_all[[j]] <-  sims <- knnsim(y,x,xtest,9,100)
   sims_dens <- density(sims)
   consolid_sims[[j]] <- sims_dens$y
   consolid_points[[j]] <- sims_dens$x
-   }
+}
 consolid_points <- unlist(consolid_points)
 consolid_sims <- unlist(consolid_sims)
 consolid_df <- data.frame(x=consolid_points,y=consolid_sims)
-consolid_df$x <- cut(consolid_df$x, breaks = seq(-6,6,.2))
+consolid_df$x <- cut(consolid_df$x, breaks = seq(-4,4,.2))
 mid_points <- cbind(lower = as.numeric( sub("\\((.+),.*", "\\1", consolid_df$x) ),
                     upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", consolid_df$x) ))
 consolid_df$x <- rowMeans(mid_points)
 og_df <- data.frame(x1=og_density$x, y1= og_density$y)
-  
 
-  
 plo <- ggplot(og_df, aes(x=x1,y=y1))+
   geom_line(size=1.25)+
-  scale_x_continuous(limits=c(-5,5)) +
+  scale_x_continuous(limits=c(-3,3)) +
+  scale_y_continuous(limits=c(0,1)) +
   geom_boxplot(consolid_df, mapping = aes(y = y, x = x,group = x), outlier.shape = NA,outlier.colour = NA)+ 
-  ggtitle(paste0("Simulated PDF \n for PC",i)) +
+  ggtitle(paste0("Simulated PDF \n for PC ", i)) +
   xlab(" ") + 
   ylab("Probability Density")
 print(plo)
 
+}
 
-par(mfrow=c(1,4))
-par(mar = c(4, 2, 1.5, 1))
 
-boxplot(mean_sim, 
-        ylim = c(1,-1))
-title(paste0("Mean-PC ", i))
-abline(h=mean(x), col = 'red')
-
-boxplot(sd_sim, 
-        ylim = c(.5,3))
-title(paste0("SD - PC ", i))
-abline(h=sd(x), col = 'red')
-
-boxplot(max_sim, 
-        ylim = c(0,20))
-title(paste0("Max - PC ", i))
-abline(h=max(x), col = 'red')
-
-boxplot(min_sim, 
-        ylim = c(-20,2))
-title(paste0("Min - PC ", i))
-abline(h=min(x), col = 'red')
-par(mfrow=c(1,1))
+#Simulation Accuracy
+N_Sims <- 1000
+for(i in 1:ncol(pcs_sel)) {
+  y <- scale(pcs_sel[,i])
+  x <- 1:length(y)
+  mean_sim <- matrix(NA, ncol = 1, nrow = N_Sims)
+  sd_sim <- matrix(NA, ncol = 1, nrow = N_Sims)
+  min_sim <- max_sim <- matrix(NA, 1, nrow = N_Sims)
+  skew_sim <- matrix(NA, 1, nrow = N_Sims)
+  for(j in 1:N_Sims) {
+    sims_all <- as.list(1)
+    x_tests <- seq(1,length(x),by = 1)
+    for(k in 1:length(x_tests)) {
+      xtest <- x_tests[k]
+      sims_all[[k]] <- knnsim(y,x,xtest,9,1)}
+    sims_all <- unlist(sims_all)
+    mean_sim[j,1] <- mean(sims_all)
+    sd_sim[j,1] <- sd(sims_all)
+    max_sim[j,1] <- max(sims_all)
+    min_sim[j,1] <- min(sims_all)}
+  
+  par(mfrow=c(1,4))
+  
+  boxplot(mean_sim, 
+          ylim = c(quantile(mean_sim, .5)-.02,quantile(mean_sim, .95)+.02))
+  title(paste0("mean"), cex = 0.5)
+  abline(h=mean(y), col = 'red')
+  
+  boxplot(sd_sim, 
+          ylim = c(quantile(sd_sim, .5)-.1,quantile(sd_sim, .95)+.1))
+  title(paste0("SD"), cex = 0.5)
+  abline(h=sd(y), col = 'red')
+  
+  boxplot(max_sim, 
+          ylim = c(quantile(max_sim, .5)-.2,quantile(max_sim, .95)+.2))
+  title(paste0("max"), cex = 0.5)
+  abline(h=max(y), col = 'red')
+  
+  boxplot(min_sim, 
+          ylim = c(quantile(min_sim, .5)-.2,quantile(min_sim, .95)+.2))
+  title(paste0("Min"), cex = 0.5)
+  abline(h=min(y), col = 'red')
+  par(mfrow=c(1,1))
 
 }
-##dev.off()
 
 
-##################Simulating the PCs Data. 
-N_Sims <- 1000
 
-x <- scale(pcs_sel[,1])
-mod_ar_1 <- ar(x, aic = TRUE)
 
-x <- scale(pcs_sel[,2])
-mod_ar_2 <- ar(x, aic = TRUE)
-
-x <- scale(pcs_sel[,3])
-mod_ar_3 <- ar(x, aic = TRUE)
 
 
 
@@ -161,26 +167,47 @@ mod_ar_3 <- ar(x, aic = TRUE)
 
 ####Combined Simulations###
 N_sims <- 1000
-sel_pcs <- npcs
 mean_sim <- matrix(NA, ncol = ncol(input_data), nrow = N_Sims)
 sd_sim <- matrix(NA, ncol = ncol(input_data), nrow = N_Sims)
 min_sim <- max_sim <- matrix(NA, ncol = ncol(input_data), nrow = N_Sims)
 
 
 for(sim in 1:N_sims) {
-  sim_pcs <- matrix(NA, ncol = sel_pcs, nrow = dim(pcs_sel)[1])
-  for(j in 1:npcs) {
-  x <- scale(pcs_sel[,1])
-  mod_ar <- ar(x, aic = TRUE)
-  sims <- arima.sim(n = length(x),
-                       list(order = arimaorder(mod_ar),
-                            ar = mod_ar$ar))
-  sims <- sims*sd(pcs_sel[,j]) #Resaling back
-  sim_pcs[,j] <- sims }
+  sim_pcs <- matrix(NA, ncol = npcs, nrow = length(x))
+  
+  sims.setar_1st <- setar.sim(B = B_1st,
+                        lag = embd_1st,
+                        nthresh = 1, 
+                        Thresh = tail(mod.setar_1st$coefficients,1), 
+                        type = "simul", 
+                        thDelay = thDelay_1st,
+                        n = 81)
+  sim_pcs[,1] <- sims.setar_1st$serie
+  sim_pcs[,1] <- sim_pcs[,1]*sd(pcs_sel[,1]) #Resaling back
 
+  sims.setar_2nd <- setar.sim(B = B_2nd,
+                        lag = embd_2nd,
+                        nthresh = 1, 
+                        Thresh = tail(mod.setar_2nd$coefficients,1), 
+                        type = "simul", 
+                        thDelay = thDelay_2nd,
+                        n = 81)
+  sim_pcs[,2] <- sims.setar_2nd$serie
+  sim_pcs[,2] <- sim_pcs[,2]*sd(pcs_sel[,2]) #Resaling back
+
+  sims.setar_3rd <- setar.sim(B = B_3rd,
+                        lag = embd_3rd,
+                        nthresh = 1, 
+                        Thresh = tail(mod.setar_3rd$coefficients,1), 
+                        type = "simul", 
+                        thDelay = thDelay_3rd,
+                        n = 81)
+  sim_pcs[,3] <- sims.setar_3rd$serie
+  sim_pcs[,3] <- sim_pcs[,3]*sd(pcs_sel[,3])
+  
   #Converting to Actual Field Space
   PC_Simulations <- sim_pcs #These are the predictions
-  nComp = sel_pcs
+  nComp = ncol(PC_Simulations)
   Simulations_Scaled =  PC_Simulations %*% t(data_pca$rotation[,1:nComp])
   for(i in 1:ncol(Simulations_Scaled)) {   Simulations_Scaled[,i] <- scale(Simulations_Scaled[,i], center = FALSE , scale=1/data_pca$scale[i]) }
   for(i in 1:ncol(Simulations_Scaled)) {   Simulations_Scaled[,i] <- scale(Simulations_Scaled[,i], center = -1 * data_pca$center[i], scale=FALSE)}
@@ -195,7 +222,7 @@ for(sim in 1:N_sims) {
 
 #####Plotting the Simulations by Moments######
 ##Plotting the means##
-#pdf(file = "plots/AR/Site Mean Simulations.pdf")
+#pdf(file = "plots/SETAR/Site Mean Simulations.pdf")
 par(mfrow=c(1,5))
 par(mar = c(4, 2, 1.5, 1))
 
@@ -208,10 +235,10 @@ for(j in 1:ncol(input_data)) {
   abline(h=mean(input_data[,j]), col = 'red')
   
 }
-##dev.off()
+#dev.off()
 
-##Plotting the Standard #deviation###
-#pdf(file = "plots/AR/Site Standard deviation Simulations.pdf")
+##Plotting the Standard Deviation###
+#pdf(file = "plots/SETAR/Site Standard Deviation Simulations.pdf")
 par(mfrow=c(1,5))
 par(mar = c(4, 2, 1.5, 1))
 for(j in 1:ncol(input_data)) {
@@ -223,10 +250,10 @@ for(j in 1:ncol(input_data)) {
   abline(h=sd(input_data[,j]), col = 'red')
   
 }
-##dev.off()
+#dev.off()
 
 ##Plotting the Max###
-#pdf(file = "plots/AR/Site Max Simulations.pdf")
+#pdf(file = "plots/SETAR/Site Max Simulations.pdf")
 par(mfrow=c(1,5))
 par(mar = c(4, 2, 1.5, 1))
 for(j in 1:ncol(input_data)) {
@@ -238,10 +265,10 @@ for(j in 1:ncol(input_data)) {
   abline(h=max(input_data[,j]), col = 'red')
   
 }
-##dev.off()
+#dev.off()
 
 ##Plotting the Min###
-#pdf(file = "plots/AR/Site Min Simulations.pdf")
+#pdf(file = "plots/SETAR/Site Min Simulations.pdf")
 par(mfrow=c(1,5))
 par(mar = c(4, 2, 1.5, 1))
 for(j in 1:ncol(input_data)) {
@@ -253,10 +280,10 @@ for(j in 1:ncol(input_data)) {
   abline(h=min(input_data[,j]), col = 'red')
   
 }
-##dev.off()
+#dev.off()
 
 #####Plotting the Simulations by Sites######
-#pdf(file = "plots/AR/Site Specific Simulation Moments.pdf")
+#pdf(file = "plots/SETAR/Site Specific Simulation Moments.pdf")
 par(mfrow=c(1,4))
 par(mar = c(4, 2, 1.5, 1))
 
@@ -269,7 +296,7 @@ for(j in 1:ncol(input_data)) {
   title(paste0("Mean-Site ", j), cex = 0.5)
   abline(h=mean(input_data[,j]), col = 'red')
   
-  #Standard #deviation
+  #Standard Deviation
   boxplot(sd_sim[,j], 
           #ylim = c(quantile(mean_sim[,j], .5)-1,quantile(mean_sim[,j], .95))+1
           ylim = c(quantile(sd_sim[,j], .5)-.2,quantile(sd_sim[,j], .95)+.2))
@@ -290,11 +317,13 @@ for(j in 1:ncol(input_data)) {
   title(paste0("Min-Site ", j), cex = 0.5)
   abline(h=min(input_data[,j]), col = 'red')
 }
-##dev.off()
-##########################################################
 
-##################Spatial Distribution of Errors#########################
-pdf(file = "plots/AR/Spatial Distribution of Errors.pdf")
+#dev.off()
+######################################
+
+
+#pdf(file = "plots/SETAR/Spatial Distribution of Errors.pdf")
+
 par(mfrow=c(1,1))
 #Plotting the Distribution of Data. 
 library("biwavelet")
@@ -366,6 +395,7 @@ points(site_info$dec_long_va,site_info$dec_lat_va,
 title("Error in Minimum Deviation Streamflow Prediction")
 legend("bottomright", c("Color - Drainage Area","Size - Error in MSE adjusted","Shape - Bias"), cex = 0.6)
 #dev.off()
+
 
 
 ##############Plotting the Wavelet Spectra Distribution###########
@@ -485,35 +515,72 @@ CI=function(conf, dat,type){
   list(sig=CI)
   
 }
-
+par(mfrow = c (1,1), mar = c(4,4,4,1))
 
 N_Sims <- 1000 
+wlt <- wavelet(x)
+avg_pow_1 <- matrix(NA, nrow = N_Sims, ncol = length(wlt$p.avg))
+avg_pow_2 <- matrix(NA, nrow = N_Sims, ncol = length(wlt$p.avg))
+avg_pow_3 <- matrix(NA, nrow = N_Sims, ncol = length(wlt$p.avg))
 
-#pdf(file = "plots/AR/Global Wavelet Simulations.pdf")
-par(mfrow = c (1,1), mar = c(4,4,4,1))
+for(j in 1:N_Sims) {
+  #Setting up matrix to store the PC powers  
+    
+  #Simulating the three PCs
+  sims.setar_1st <- setar.sim(B = B_1st,
+                              lag = embd_1st,
+                              nthresh = 1, 
+                              Thresh = tail(mod.setar_1st$coefficients,1), 
+                              type = "simul", 
+                              thDelay = thDelay_1st,
+                              n = 81)
+  wlt <- wavelet(sims.setar_1st$serie)
+  avg_pow_1[j,] <- wlt$p.avg
+  
+  sims.setar_2nd <- setar.sim(B = B_2nd,
+                              lag = embd_2nd,
+                              nthresh = 1, 
+                              Thresh = tail(mod.setar_2nd$coefficients,1), 
+                              type = "simul", 
+                              thDelay = thDelay_2nd,
+                              n = 81)
+  wlt <- wavelet(sims.setar_2nd$serie)
+  avg_pow_2[j,] <- wlt$p.avg
+  
+  sims.setar_3rd <- setar.sim(B = B_3rd,
+                              lag = embd_3rd,
+                              nthresh = 1, 
+                              Thresh = tail(mod.setar_3rd$coefficients,1), 
+                              type = "simul", 
+                              thDelay = thDelay_3rd,
+                              n = 81)
+  wlt <- wavelet(sims.setar_3rd$serie)
+  avg_pow_3[j,] <- wlt$p.avg
+    
+}
+ 
+#pdf(file = "plots/SETAR/Global Wavelet Simulations.pdf")
 for(i in 1:npcs) {
   x <- scale(pcs_sel[,i])
-  wlt_og=wavelet(x)
   Cw=CI(0.9,x,"w");
   C=CI(0.9,x,"r");
+  wlt_og=wavelet(x)
   plot(wlt_og$period,wlt_og$p.avg,xlim=c(0,75),
        main=paste0("Global Wavelet Spectrum for PC",i),
        xlab="Period",ylab="Variance", col ='red',
-       ylim = c((min(wlt_og$p.avg)-2),(max(wlt_og$p.avg)+2))) 
+       ylim = c((min(wlt_og$p.avg)-1),(max(wlt_og$p.avg)+7.5))) 
   lines(wlt_og$period,wlt_og$p.avg, col ='red');
-  lines(wlt_og$period,Cw$sig, lty = 2);
-  lines(wlt_og$period,C$sig,col="red", lty = 2);
-  avg_pow_matrix <- matrix(NA, nrow = N_Sims, ncol = length(wlt_og$p.avg))
-  
-  for(j in 1:N_Sims) {
-  
-  mod_ar <- ar(x, aic = TRUE)
-  sims <- arima.sim(n = length(x),
-                    list(order = arimaorder(mod_ar),
-                         ar = mod_ar$ar))
-  wlt=wavelet(sims);
-  avg_pow_matrix[j,] <- wlt$p.avg
+  lines(wlt$period,Cw$sig, lty = 2);
+  lines(wlt$period,C$sig,col="red", lty = 2);
+  avg_pow_matrix <- matrix(NA, nrow = N_Sims, ncol = length(wlt$p.avg))
+  if (i ==  1) {
+    avg_pow_matrix <- avg_pow_1
+  } else if ( i == 2) {
+    avg_pow_matrix <- avg_pow_2
+  } else  {
+    avg_pow_matrix <- avg_pow_3
   }
+
   lower_percentile <- apply(avg_pow_matrix, 2, function(x) quantile(x, probs=.05))
   upper_percentile <- apply(avg_pow_matrix, 2, function(x) quantile(x, probs=.95))
   median_percentile <- apply(avg_pow_matrix, 2, median)
@@ -521,4 +588,56 @@ for(i in 1:npcs) {
   lines(wlt_og$period, upper_percentile)
   lines(wlt_og$period, median_percentile, lwd = 2)
 }
-##dev.off()
+#dev.off()
+
+
+
+
+
+
+##########Notes##############
+'''For the First PC
+Warning message:
+  Possible unit root in the low  regime. Roots are: 0.9761 1.2779
+Scaling helps. 
+1,4,5 do good, but all are good too.
+thDelay          th  pooled-AIC          mL          mH 
+0.0000000  -0.7570516 223.8116432   1.0000000   1.0000000 
+
+thDelay          th  pooled-AIC          mL          mH 
+2.0000000   0.4894034 211.4874546   4.0000000   4.0000000 
+
+thDelay          th  pooled-AIC          mL          mH 
+0.0000000  -0.7015116 193.8520008   5.0000000   1.0000000
+
+
+For the Second PC
+Scaling helps. helps
+m = 1,2,3 are the best onses. 
+thDelay         th pooled-AIC         mL         mH 
+0.000000  -0.431934 213.574713   1.000000   1.000000 
+thDelay         th pooled-AIC         mL         mH 
+0.000000  -0.431934 210.112013   1.000000   2.000000
+thDelay          th  pooled-AIC          mL          mH 
+0.0000000  -0.2869277 205.1642087   3.0000000   2.0000000
+
+
+
+For the third PC. 
+m = 4 is great. 
+thDelay         th pooled-AIC         mL         mH 
+3.000000  -1.501299 266.082602   4.000000   1.000000
+'''
+
+
+
+##################################################
+
+
+
+
+
+
+
+
+
