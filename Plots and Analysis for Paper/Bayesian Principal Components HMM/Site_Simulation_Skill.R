@@ -1,6 +1,7 @@
 setwd("~/Correlated Risk Analysis/Plots and Analysis for Paper/Bayesian Principal Components HMM/Visualizations")
 
 library(maps)
+library(plotrix)
 
 
 #Read the Simulations Data
@@ -69,11 +70,14 @@ for(site in 1:ncol(input_data)) {
 
 
 #Visualizing the Good Sites and Bad Sites.
-bad_sites <-       #This has to be manually done. 
+bad_sites <- c(4, 10, 13, 18, 22)      #This has to be manually done. Also 20,21
+jj <- rep(19, nrow(Site_info))
+jj[bad_sites] <- 1
+ju=abs(pcs$rotation[,1])/max(abs(pcs$rotation[,1]))
 
 map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
 points(Site_info$dec_long_va,Site_info$dec_lat_va,
-       pch=19,
-       cex=0.5)
-       #col=color.scale(final_sites$drain_area_va,c(1,0.5,0),c(0,0,1),color.spec="rgb"))
-title("Error in Streamflow Prediction")
+       pch=jj,
+       cex=1,
+       col=color.scale(ju,c(1,0.5,0),c(0,0.5,0),c(0,0,1),color.spec="rgb"))
+title("Good Sites and Bad Sites")
