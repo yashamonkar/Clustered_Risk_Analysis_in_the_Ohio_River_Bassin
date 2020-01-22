@@ -4,13 +4,14 @@
 #Input:- 1. Original DataSet of length T. 
 #2. Matrix of NxT simulations.
 #3. Time Series Name
+#4. How many of the original simulations to be included. 
 
 #Output:- 1. Moments -  Mean, SD, Max, Min. 
 #Output:- 2. PDF.
 #Output:- 3. CDF.
 #Output:- 4. AutoCorrelation Structure.
-#Output:- 5. Lag-1 and Lag-2 Structure.
-#Output:- 6. Wavelet Analysis. 
+#Output:- 5. Wavelet Analysis. 
+#Output:- 6. Lag-1 and Lag-2 Structure.
 
 get_SimSkill <- function(N_Sims, og_data, Sim_Mat, name, moments, prob_dens,
                          cumm_dens, auto, wavelt, lagged){
@@ -253,6 +254,7 @@ get_SimSkill <- function(N_Sims, og_data, Sim_Mat, name, moments, prob_dens,
     geom_boxplot(consolid_df, mapping = aes(y = y, x = x+0.5,group = x), outlier.shape = NA,outlier.colour = NA)+ 
     ggtitle(paste0("ACF Sims of ", og_name)) +
     ylab("ACF") +
+    geom_point(size=1.25)+
     xlab(paste0(og_name)) +
     geom_hline(yintercept=acf_significance_level, linetype="dashed", color = "blue")+
     geom_hline(yintercept=-acf_significance_level, linetype="dashed", color = "blue")+
