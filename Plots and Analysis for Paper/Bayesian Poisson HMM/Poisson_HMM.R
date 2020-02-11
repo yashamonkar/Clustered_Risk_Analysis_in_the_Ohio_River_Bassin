@@ -6,7 +6,7 @@ library(rstan)
 library(dplyr)
 options(mc.cores = parallel::detectCores()) #Local Multicore CPU excess 
 print("Library Loading Complete")
-
+source("Get_Simulation_Skill.R")
 
 #Reading the Data. 
 input_data <- read.table("data/Annual_Maximum_Streamflows.txt", sep=" ", header = TRUE)
@@ -39,16 +39,8 @@ print(hmm_fit, pars = "z_star", include = FALSE, probs = c(0.05,0.95))
 
 # extract samples
 samples <- as.matrix(hmm_fit)
-print(dim(samples))
-theta <- samples[,grep("^theta",colnames(samples))]
-print(dim(theta))
-write.table(theta, "Transition_Parameters.txt", sep = " ")
 mu <- samples[,grep("^mu",colnames(samples))]
-print(dim(mu))
-write.table(mu, "Emission_Parameters.txt", sep = " ")
 z_star <- samples[,grep("^z_star",colnames(samples))]
-print(dim(z_star))
-write.table(z_star, "Hidden_States.txt", sep = " ")
 
 # simulate observations for each iteration in the sample
 y_hat <- list()
@@ -57,31 +49,15 @@ for (i in 1:nrow(samples)) {
   y_hat[[i]] <- rpois(length(psi_seq), psi_seq)
 }
 
-# plot
-indxs <- sample(length(y_hat), 200, replace = FALSE)
-plot(Count_prox$Count, type = "n",
-     main = "Observed vs Predicted Output",
-     ylab = "Observation Value",
-     xlab = "Time",
-     ylim = c(-1,20))
-for (i in indxs) {
-  lines(y_hat[[i]], col = "#ff668890")
-}
-lines(Count_prox$Count, lwd = 2)
-legend("bottomright", c("Observed","Simulated"), col = c("#000000","#ff668890"), lty = c(1,1), lwd = c(2,1), cex = 0.8)
+y_hat <- matrix(unlist(y_hat), ncol = nrow(samples))
 
-# plot
-indxs <- sample(length(y_hat), 200, replace = FALSE)
-og_dens <- density(Count_prox$Count)
-plot(og_dens$x,og_dens$y, type = "n",
-     main = "Observed vs Predicted Output",
-     ylab = "Observation Value",
-     xlab = "Time",
-     xlim = c(-1,30),
-     ylim = c(0, 0.4))
-for (i in indxs) {
-  dens <- density(y_hat[[i]])
-  lines(dens$x,dens$y, col = "#ff668890")
-}
-lines(og_dens$x,og_dens$y, lwd = 2)
-legend("bottomright", c("Observed","Simulated"), col = c("#000000","#ff668890"), lty = c(1,1), lwd = c(2,1), cex = 0.8)
+get_SimSkill(og_data = Count_prox$Count,
+             Sim_Mat = y_hat,
+             name = "Exceedance Counts", 
+             moments = TRUE,
+             prob_dens = TRUE, 
+             cumm_dens = TRUE,
+             auto = TRUE,
+             wavelt = TRUE,
+             lagged = TRUE,
+             N_Sims = 2000)
