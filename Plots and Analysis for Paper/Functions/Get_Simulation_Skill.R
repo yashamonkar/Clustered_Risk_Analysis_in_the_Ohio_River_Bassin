@@ -19,6 +19,7 @@ get_SimSkill <- function(N_Sims, og_data, Sim_Mat, name, moments, prob_dens,
   #Libraries
   library(ggplot2)
   library(MASS)
+  library(gridExtra)
   
   #Read the input data
   tx <- og_data
@@ -170,6 +171,38 @@ get_SimSkill <- function(N_Sims, og_data, Sim_Mat, name, moments, prob_dens,
   abline(h=min(tx),col='red',lwd=2)
   mtext(paste0(og_name),  side = 3, line = -1.5, outer = TRUE)
   par(mfrow = c(1,1), mar = c(4,3,4,2))
+  
+  #Violin Plots
+  violin_dataset <- data.frame(mean_sim = mean_sim, sd_sim = sd_sim, ind = 1,
+                               max_sim = max_sim, min_sim = min_sim)
+  
+  p_mean <- ggplot(violin_dataset, aes(x=ind, y=mean_sim)) +
+  geom_violin() + labs(y = " ", x = " ") +
+  geom_hline(yintercept=mean(tx), color = "red", size = 1.2) +
+  ggtitle(c("Mean")) + geom_boxplot(width=0.1)+
+    theme(plot.title = element_text(size = 20, face = "bold"))
+  
+  p_sd <- ggplot(violin_dataset, aes(x=ind, y=sd_sim)) +
+    geom_violin() + labs(y = " ", x = " ") +
+    geom_hline(yintercept=sd(tx), color = "red", size = 1.2) +
+    ggtitle(c("SD")) + geom_boxplot(width=0.1) +
+    theme(plot.title = element_text(size = 20, face = "bold"))
+  
+  p_max <- ggplot(violin_dataset, aes(x=ind, y=max_sim)) +
+    geom_violin() + labs(y = " ", x = " ") +
+    geom_hline(yintercept=max(tx), color = "red", size = 1.2) +
+    ggtitle(c("Maximum")) + geom_boxplot(width=0.1) +
+    theme(plot.title = element_text(size = 20, face = "bold"))
+  
+  p_min <- ggplot(violin_dataset, aes(x=ind, y=min_sim)) +
+    geom_violin() + labs(y = " ", x = " ") +
+    geom_hline(yintercept=min(tx), color = "red", size = 1.2) +
+    ggtitle(c("Minimum")) + geom_boxplot(width=0.1) +
+    theme(plot.title = element_text(size = 20, face = "bold"))
+  
+  grid.arrange(p_mean, p_sd, ncol=2)
+  grid.arrange(p_max, p_min, ncol=2)
+  grid.arrange(p_mean, p_sd, p_max, ncol=3)
   }
   
   ##Probability Density
