@@ -42,10 +42,14 @@ get_SETAR <- function(Max_Flow, Sites, np, embd, Num_Sims){
     mod.setar <-  setar(x, m = embd_dim[i], thDelay = sel_model[1],
                         th = sel_model[2], mL = sel_model[4],
                         mH = sel_model[5])
+    print(summary(mod.setar))
     plot(x,type='l', 
-         main = paste0("PC-",i))
+         main = paste0("SETAR Model Fit PC-",i),
+         xlab = "Years")
     lines((embd_dim[i]+1):81,mod.setar$fitted.values,type='l',col='red')
     lines((embd_dim[i]+1):81, mod.setar$residuals, col='blue')
+    legend(c('bottomright'), legend = c("Fitted","Residials"),
+           col=c("red","blue"), lty=1, cex = 0.55)
   
   #Simulating the Time Series
   ml <- as.vector(head(mod.setar$coefficients,sel_model[4]+1)) #Getting the lower regime coefficients
@@ -257,6 +261,7 @@ get_SETAR <- function(Max_Flow, Sites, np, embd, Num_Sims){
   #Generating the Lag Plots. 
   
   for(i in 1:npcs) {
+    library(ggplot2)
     x <- scale(pcs_sel[,i]);sims <- as.data.frame(Sims_Array[i,,])
     for(lg in 1:4){
     lag_og <- cbind(x1=ts(x),x2=lag(ts(x),lg));lag_og <- as.data.frame(lag_og[complete.cases(lag_og), ])
