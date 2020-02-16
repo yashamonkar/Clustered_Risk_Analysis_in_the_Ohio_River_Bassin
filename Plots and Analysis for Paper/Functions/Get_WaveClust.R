@@ -49,6 +49,7 @@ get_WaveClust <- function(Max_Flow, Sites) {
     ju=rep(NA,nc)
     for (i in 1:nclus)ju[cls[[i]]]=rep(i,length(cls[[i]]))
     par(mfrow=c(1,1))
+    par(mar=c(4,4,4,4))
     map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
     points(coord$lon,coord$lat,pch=19,cex=1,col=ju)
     title("Spatial Distribution of Clusters")
@@ -69,29 +70,42 @@ get_WaveClust <- function(Max_Flow, Sites) {
       p=pcw$x[,1]
       #get wavelet of first pc            
       wlt=wavelet(p);
+      wt1=wt(cbind(yr1:yr2,p))
       Cw=CI(0.9,p,"w");
       C=CI(0.9,p,"r");
       nam1=paste("Wavelet Cluster",nam);
-      #nam1=paste("Wavelet Cluster",as.character(i),nam);
-      par(mfrow=c(2,2))
-      par(mar=c(4,2,3,0.5))
-      plot(yr1:yr2,p,xlab="Year",ylab=nam,main="Cluster PC 1");
-      lines(lowess(yr1:yr2,p,f=1/9),lwd=2,col="red");
-      plot(wlt$period,wlt$p.avg,xlim=c(0,32),main="Global Wavelet Spectrum",xlab="Period",ylab="Variance"); lines(wlt$period,wlt$p.avg);
-      lines(wlt$period,Cw$sig);
-      lines(wlt$period,C$sig,col="red");
-      wt1=wt(cbind(yr1:yr2,p));plot(wt1, type="power.corr.norm", xlab="Year",main=nam1);
-      
       jj=rep(1,nc)
       jj[ju==i]=19
       drainage_areas <- (Site_info$drain_area_va/max(Site_info$drain_area_va))+1
       jc=rep(0,nc);jc[cls[[i]]]=abs(pcw$rotation[,1])
-      par(mar=c(3,3,3,0))
+      
+      #Plotting
+      par(mfrow=c(2,2))
+      par(mar=c(4,2,3,0.5))
+      plot(yr1:yr2,p,xlab="Year",ylab=nam,main= paste0("Cluster ",i, " PC 1"));
+      lines(lowess(yr1:yr2,p,f=1/9),lwd=2,col="red");
+      
+      par(mar=c(0,0,4,0))
       map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
-      title("Stream Gauges with Loadings")
+      title("Stream Gauges with Eigenvectors")
       points(coord$lon,coord$lat,pch=jj,cex=drainage_areas,col=color.scale(jc,c(1,0.5,0),c(0,0.5,0),c(0,0,1),color.spec="rgb"))
       
       
+      
+      
+      #Wavelet Comparision
+      par(mar=c(4,4,3,0.5))
+      plot(wt1, type="power.corr.norm", xlab="Year",main='Wavelet Power Spectrum', ylab="Period(Years)",
+           ylim=c(min(wt1$period),max(wt1$period)))
+      #axis(2,at=ytick,labels=ytick)
+      plot(wlt$p.avg,wlt$period,ylim=c(max(wt1$period),min(wt1$period)),ylab="Period(Years)",xlab="Variance",
+           main="Global Wavelet Spectrum",log="y",yaxs="i")
+      lines(wlt$p.avg,wlt$period)
+      lines(Cw$sig,wlt$period)
+      lines(C$sig,wlt$period,col="red")
+      
+      par(mfrow=c(2,2))
+      par(mar=c(4,2,3,0.5))
     }
     par(mfrow=c(1,1))
   }

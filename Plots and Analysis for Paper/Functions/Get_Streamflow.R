@@ -3,7 +3,7 @@
 #Input:- Lat-Lon Boxes. 
 #2. Drainage Area
 
-get_max_streamflow <- function(lat_min, lat_max, lon_min, lon_max, drain_area,
+get_max_streamflow <- function(lat_min, lat_min, lon_min, lon_min, drain_area,
                                start_date,end_date,missing_data){
 
 #Output:- 1. Site-Specific Annual Maximums
@@ -21,16 +21,16 @@ library(maps)
 ####Getting the Sites### 
   
 #Divinding into boxes of smaller lat-lon dimension. (Done since query size can be only so big)
-lat_min <- 35 #lat_min
-lat_max <- 42 #lat_max
-lon_min <- -90#lon_min
-lon_max <- -78 #lon_max
+lat_min <- lat_min #lat_min
+lat_max <- lat_min #lat_max
+lon_min <- lon_min#lon_min
+lon_max <- lon_max #lon_max
 lats <- lat_max-lat_min 
 lons <- lon_max-lon_min
     
 #ParameterCD is discharge in cubic ft/sec and is daily mean. Source:- https://help.waterdata.usgs.gov/code/parameter_cd_nm_query?parm_nm_cd=%25discharge%25&fmt=html
 #hasDataTypeCd tells how is the parameter of interest measured. dv means daily. Source:- https://waterservices.usgs.gov/rest/Site-Service.html#outputDataTypeCd
-sites_info <- list(1:10)
+sites_info <- list()
 for(i in 1:lats) {
  lat_mi <- lat_min+i-1;lat_ma <- lat_mi+1
   for(j in 1:lons) {
@@ -110,7 +110,7 @@ library(sf)
 library(rgeos)
 library(sp)
 library(rgdal)
-orb=st_read("data/ORBShape/WBDHU6.shp")%>%st_transform(crs="+proj=longlat +datum=NAD83")
+orb=st_read("data/ORBShape/ORBShape/WBDHU6.shp")%>%st_transform(crs="+proj=longlat +datum=NAD83")
 
 ORB_gauges <- ggplot() + 
   geom_sf(data = orb, size = 0.1, color = "black", fill = "cyan1") + 
@@ -129,7 +129,7 @@ gauges=data.frame(
 coordinates(gauges)=~lon+lat
   
 #Reading the RiverBasin Map  
-ORB.map <- readOGR("data/ORBShape/WBDHU6.shp")  
+ORB.map <- readOGR("data/ORBShape/ORBShape/WBDHU6.shp")  
 proj4string(ORB.map) <- proj4string(gauges) #Getting them to the same projections
 
 sites_present <- over(gauges, ORB.map)
@@ -155,8 +155,8 @@ pb = txtProgressBar(min = 1, max = num_sites, initial = 1)
 for(i in 1:num_sites){
   setTxtProgressBar(pb,i)
   parameterCd <- "00060"  # Discharge ft3/sec
-  startDate <- "1937-01-01"
-  endDate <- "2017-12-31"
+  startDate <- start_date
+  endDate <- end_date
   statCd = "00003"
   discharge <- readNWISdv(final_sites$site_no[i], parameterCd, startDate, endDate, statCd)
   discharge <- renameNWISColumns(discharge)

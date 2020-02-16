@@ -39,7 +39,7 @@ PCwav=function(x,npcs,coords,nam,yr1){
   # supplying correlation matrix to the princomp so that nr<nc case does not lead to a problem
   pcs=prcomp(x, scale = TRUE)
   var <- cumsum(pcs$sdev^2)
-  par(mar=c(4,4,3,0.5))
+  par(mar=c(4,5,3,0.5))
   plot(var/max(var), main = "Variance explained by the PC's",
        ylab = "Variance Explained", xlab = "Number of PC's")
   abline(v=npcs, lty = 2)
@@ -50,28 +50,35 @@ PCwav=function(x,npcs,coords,nam,yr1){
     wlt=wavelet(p)
     Cw=CI(0.9,p,"w")
     C=CI(0.9,p,"r")
-    #above gets global wavelet white and red noise conf limts
-    nam1=paste("PC",as.character(i),nam)
-    nam2=paste("Wavelet -PC",as.character(i))
+    wt1=wt(cbind(yr1:yr2,p))
+    nam1=paste("PC",as.character(i))
+    nam2=paste("Wavelet Power Spectrum")
+    drainage_areas <- (Site_info$drain_area_va/max(Site_info$drain_area_va))+1
+    
+    #Plotting
     par(mfrow=c(2,2));
-    par(mar=c(4,2,3,0.5))
-    plot(yr1:yr2,p,xlab="Year",ylab=nam,main=nam1)
+    par(mar=c(4,4,3,2))
+    plot(yr1:yr2,p,xlab="Year",ylab="Score",main=nam1)
     lines(lowess(yr1:yr2,p,f=1/9),lwd=2,col="red")
     #above plots PC time series and lowess through it
-    plot(wlt$period,wlt$p.avg,xlim=c(0,32),main="Global Wavelet Spectrum",xlab="Period",ylab="Variance"); lines(wlt$period,wlt$p.avg);
-    lines(wlt$period,Cw$sig)
-    lines(wlt$period,C$sig,col="red")
-    #above plots PC loadings
-    wt1=wt(cbind(yr1:yr2,p));plot(wt1, type="power.corr.norm", xlab="Year",main=nam2)
-    #above plots Global wavelet and conf limits
-    #par(mfrow=c(1,1))
+    
     ju=abs(pcs$rotation[,i])
-    par(mar=c(0,0,0,0))
+    par(mar=c(0,0,4,0))
     map('state', region = c("Ohio","Indiana", "Illinois","West Virginia","Kentucky","Pennsylvania","Virginia"))
-    points(coords$lon,coords$lat,pch=19,cex=1,col=color.scale(ju,c(1,0.5,0),c(0,0.5,0),c(0,0,1),color.spec="rgb"))
-    #points(dams_dataset$Longitude,dams_dataset$Latitude,pch=9,cex=1)
+    points(coords$lon,coords$lat,pch=19,cex=drainage_areas,col=color.scale(ju,c(1,0.5,0),c(0,0.5,0),c(0,0,1),color.spec="rgb"))
+    title("Stream Gauges with Eigenvectors")
     
     
+    par(mar=c(4,4,3,0.5))
+    ytick <- seq(2, 100, by=2)
+    plot(wt1, type="power.corr.norm", xlab="Year",main=nam2, ylab="Period(Years)",
+         ylim=c(min(wt1$period),max(wt1$period)))
+    #axis(2,at=ytick,labels=ytick)
+    plot(wlt$p.avg,wlt$period,ylim=c(max(wt1$period),min(wt1$period)),ylab="Period(Years)",xlab="Variance",
+         main="Global Wavelet Spectrum",log="y",yaxs="i")
+    lines(wlt$p.avg,wlt$period)
+    lines(Cw$sig,wlt$period)
+    lines(C$sig,wlt$period,col="red")
   }
   #above requires wavelets package from R and plots regular wavelets plot 
   par(mfrow=c(1,1))

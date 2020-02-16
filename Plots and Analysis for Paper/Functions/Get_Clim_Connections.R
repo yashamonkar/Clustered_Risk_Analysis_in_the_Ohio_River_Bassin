@@ -11,8 +11,6 @@ get_Clim_Connections <- function(Max_Flow, Sites, npcs, target) {
   #Read the site data.
   Ann_Max <- Max_Flow
   Site_info <- Sites
-  #Ann_Max <- Ann_Max_Streamflow #Delete this line
-  #Site_info <- Site_Info
   start_year <- min(Ann_Max$Year);end_year <- max(Ann_Max$Year)
   Ann_Max$Year <- NULL
   Ann_Max <- log(Ann_Max)
@@ -23,70 +21,35 @@ get_Clim_Connections <- function(Max_Flow, Sites, npcs, target) {
   pcs_sel <- data_pca$x[,1:npcs] 
   
   #Reading in the climate indices. 
-  nino_34 <- read.table("data/Climate_Index/iersst_nino3.4a.dat.txt", header = TRUE, sep ="", dec=".")
-  pdo <- read.table("data/Climate_Index/ipdo_a.txt", header = TRUE, sep ="", dec=".")
-  nao <- read.table("data/Climate_Index/inao_a.txt", header = TRUE, sep ="", dec=".")
-  amo <- read.table("data/Climate_Index/iamo_hadsst_ts_a.txt", header = TRUE, sep ="", dec=".")
+  nino_34 <- read.table("data/Nino_34.txt", header = TRUE, sep ="", dec=".")
+  pdo <- read.table("data/PDO.txt", header = TRUE, sep ="", dec=".")
+  nao <- read.table("data/NAO.txt", header = TRUE, sep ="", dec=".")
   
-  #Renaming. 
-  colnames(pdo) <- c("Time","PDO_Index")
-  colnames(nao) <- c("Time","NAO_Index")
-  colnames(nino_34) <- c("Time","Nino_Index")
-  colnames(amo) <- c("Time","AMO_Index")
-  Months <- c("Jan","Feb","Mar","April","May","June", "Jul","Aug","Sept","Oct","Nov","Dec")
-  target <- target
-  years <- c(1936, 2018)
+  #Subsetting 
+  nino_temp <- nino_34 %>% filter(Month %in% target)
+  nino_temp <- nino_temp %>% group_by(Year) %>% summarise(ENSO = mean(ENSO))
+  nino_subset <- nino_temp %>% subset(Year >= start_year & Year <= end_year)
   
-  #Getting the combined PDO-NAO Index.
-  nao_temp <- nao[23:dim(nao)[1],] #Starting from 1824. 
-  nao_temp$Month <- rep(Months,195)
-  nao_temp$Year <- rep(1824:2018,each= 12)
-  nao_temp <- nao_temp %>% filter(Month %in% target)
-  nao_temp <- nao_temp %>% group_by(Year) %>% summarise(NAO_Index = mean(NAO_Index))
-  nao_temp$NAO_detrended <- nao_temp$NAO_Index - mean(nao_temp$NAO_Index)
-  nao_temp <- nao_temp %>% filter(
-    Year > years[1],
-    Year < years[2]
-  )
+  pdo_temp <- pdo %>% filter(Month %in% target)
+  pdo_temp <- pdo_temp %>% group_by(Year) %>% summarise(PDO = mean(PDO))
+  pdo_subset <- pdo_temp %>% subset(Year >= start_year & Year <= end_year)
   
+  nao_temp <- nao %>% filter(Month %in% target)
+  nao_temp <- nao_temp %>% group_by(Year) %>% summarise(NAO = mean(NAO))
+  nao_subset <- nao_temp %>% subset(Year >= start_year & Year <= end_year)
   
-  pdo_temp <- pdo[12:dim(pdo)[1],]
-  pdo_temp$Month <- rep(Months,117)
-  pdo_temp$Year <- rep(1901:2017,each= 12)
-  pdo_temp <- pdo_temp %>% filter(Month %in% target)
-  pdo_temp <- pdo_temp %>% group_by(Year) %>% summarise(PDO_Index = mean(PDO_Index))
-  pdo_temp$PDO_detrended <- pdo_temp$PDO_Index - mean(pdo_temp$PDO_Index)
-  pdo_temp <- pdo_temp %>% filter(
-    Year > years[1],
-    Year < years[2]
-  )
+  #Interactions
+  nino_nao <- (nino_subset$ENSO-mean(nino_subset$ENSO))*(nao_subset$NAO-mean(nao_subset$NAO))
+  nino_pdo <- (nino_subset$ENSO-mean(nino_subset$ENSO))*(pdo_subset$PDO-mean(pdo_subset$PDO))
+  pdo_nao <- (pdo_subset$PDO-mean(pdo_subset$PDO))*(nao_subset$NAO-mean(nao_subset$NAO))
   
-  nino_temp <- nino_34[12:1967,] #Start from 1855
-  nino_temp$Month <- rep(Months,163)
-  nino_temp$Year <- rep(1855:2017,each= 12)
-  nino_temp <- nino_temp %>% filter(Month %in% target)
-  nino_temp <- nino_temp %>% group_by(Year) %>% summarise(ENSO_Index = mean(Nino_Index))
-  nino_temp$ENSO_detrended <- nino_temp$ENSO_Index - mean(nino_temp$ENSO_Index)
-  nino_temp <- nino_temp %>% filter(
-    Year > years[1],
-    Year < years[2]
-  )
-  
-  
-  
-  #Combining them together. 
-  climate_indices <- cbind(nino_temp,pdo_temp[,2:3],nao_temp[,2:3])
-  climate_indices$PDO_NAO <- climate_indices$NAO_detrended*climate_indices$PDO_Index
-  climate_indices$ENSO_NAO <- climate_indices$ENSO_detrended*climate_indices$NAO_detrended
-  climate_indices$ENSO_PDO <- climate_indices$ENSO_detrended*climate_indices$PDO_Index
-  climate_indices$PDO_detrended <- NULL
-  climate_indices$NAO_detrended <- NULL
-  climate_indices$Year <- NULL
-  climate_indices$ENSO_detrended <- NULL
-  colnames(climate_indices) <- c("ENSO","PDO","NAO","PDO_NAO","ENSO_NAO","ENSO_PDO")
-  
-  climate_indices$ENSO_NAO <- scale(climate_indices$ENSO_NAO)
-  climate_indices$PDO_NAO <- scale(climate_indices$PDO_NAO)
+  #Collating
+  climate_indices <- data.frame(ENSO=nino_subset$ENSO,
+                                NAO=nao_subset$NAO,
+                                PDO=pdo_subset$PDO,
+                                ENSO_NAO=nino_nao,
+                                ENSO_PDO=nino_pdo,
+                                NAO_PDO=pdo_nao)
   
   cor.mtest <- function(mat, ...) {
     mat <- as.matrix(mat)
@@ -108,25 +71,11 @@ get_Clim_Connections <- function(Max_Flow, Sites, npcs, target) {
     temp <-  cbind(pcs_sel[,i],climate_indices)
     colnames(temp)[1] <- paste0("PC_",i)
     M<-cor(temp)
-    print(M)
+    par(mar=c(5,5,5,5))
     p.mat <- cor.mtest(temp)
     corrplot(M, type="upper", order="hclust", 
              p.mat = p.mat, sig.level = 0.05)
   }
-  
-  
-  #  par(mfrow=c(1,1))
-  #  for(i in 1:npcs) {
-  #    pc <- cbind(1937:2017, pcs_sel[,i])
-  #    for(j in 1:ncol(climate_indices)) {
-  #      clim <- cbind(1937:2017, climate_indices[,j])
-  #      wtc.plt <- wtc(pc, clim) 
-  #      par(mar = c(4,4,2,6))
-  #      plot(wtc.plt, main = paste0("Coherence: PC-",i," & ", colnames(climate_indices)[j]),
-  #           plot.cb = TRUE,plot.phase = TRUE,
-  #           xlab = c("Year"), ylab = c("Period(years)"))
-  #    }
-  #  }
   
   ###Wavelet Function##########
   
@@ -340,70 +289,46 @@ get_Clim_Connections <- function(Max_Flow, Sites, npcs, target) {
     list(sig=CI)
     
   }
-  ################# 
+  #################   
   
-  
-  
-  
-  
-  for(i in 1:npcs) {
-    p <- pcs_sel[,i]
-    wlt <- wavelet(p)
-    Cw=CI(0.9,p,"w")
-    C=CI(0.9,p,"r")
-    plot(wlt$period,wlt$p.avg,xlim=c(0,32),
-         main=paste0("Global Wavelet Spectrum PC-",i),
-         xlab="Period",ylab="Variance"); 
-    lines(wlt$period,wlt$p.avg);
-    lines(wlt$period,Cw$sig)
-    lines(wlt$period,C$sig,col="red")
-    wt1=wt(cbind(start_year:end_year,p))
-    plot(wt1, type="power.corr.norm", xlab="Year",
-         main=paste0("Power Spectrum PC-",i))
-    
-  }
-  
-  for(i in 1:ncol(climate_indices)) {
-    p <- climate_indices[,i]
-    wlt <- wavelet(p)
-    Cw=CI(0.9,p,"w")
-    C=CI(0.9,p,"r")
-    plot(wlt$period,wlt$p.avg,xlim=c(0,32),
-         main=paste0("Global Wavelet Spectrum ",colnames(climate_indices)[i]),
-         xlab="Period",ylab="Variance"); 
-    lines(wlt$period,wlt$p.avg);
-    lines(wlt$period,Cw$sig)
-    lines(wlt$period,C$sig,col="red")
-    
-  }
   
   par(mfrow=c(1,1))
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+  for(i in 1:npcs) { #For Each PC
+    pc <- cbind(start_year:end_year, pcs_sel[,i])
+    for(j in 1:ncol(climate_indices)) { #For each climate index. 
+      clim <- cbind(start_year:end_year, climate_indices[,j])
+      wtc1 <- wtc(pc, clim) #Wavelet Coherence
+      wlt=wavelet(climate_indices[,j])
+      Cw=CI(0.9,climate_indices[,j],"w")
+      C=CI(0.9,climate_indices[,j],"r")
+      wt1=wt(cbind(start_year:end_year,climate_indices[,j]))
+      
+      
+      par(mar=c(10,4,5,0.5), mfrow=c(1,3))
+      plot(wtc1,
+           plot.phase = TRUE, #plot.cb = TRUE,
+           xlab = c("Year"), ylab = c("Period(years)"),
+           ylim=c(min(wtc1$period),max(wtc1$period)))
+      title("Wavelet Coherence", adj = 0.5, line = -44, cex = 1.5, cex.main = 1.5)
+      title(paste0("PC-",i, " and ", colnames(climate_indices)[j]), adj = 0.5, line = -45.5, cex.main = 1.25)
+      
+      plot(wlt$p.avg,wlt$period,ylim=c(max(wtc1$period),min(wtc1$period)),ylab="Period(Years)",xlab="Variance",
+           log="y",yaxs="i")
+      lines(wlt$p.avg,wlt$period)
+      lines(Cw$sig,wlt$period)
+      lines(C$sig,wlt$period,col="red")
+      title("Global Wavelet Spectrum", adj = 0.5, line = -44, cex.main = 1.4)
+      title(paste0("PC-",i, " and ", colnames(climate_indices)[j]), adj = 0.5, line = 2, cex.main = 1.5)
+      title(paste0(colnames(climate_indices)[j]), adj = 0.5, line = -45.5, cex.main = 1.24)
+      
+      
+      plot(wt1, xlab="Year", ylab="Period(Years)",
+           ylim=c(min(wtc1$period),max(wtc1$period)))
+      title("Wavelet Power Spectrum", adj = 0.5, line = -44, cex.main = 1.4)
+      title(paste0(colnames(climate_indices)[j]), adj = 0.5, line = -45.5, cex.main = 1.25)
+      
+    }
+  }
   
   
   
